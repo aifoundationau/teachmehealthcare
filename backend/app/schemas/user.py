@@ -11,8 +11,33 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str
-    role: str = "student"  # admin, doctor, student
+    role: str = "supporter"  # supporter, doctor, student, admin
     specialization: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    supporter_comments: Optional[str] = None
+    app_tag: str = "healthlms"
+
+
+class SupporterRegister(BaseModel):
+    """Schema for supporter registration with Google auth and backup password."""
+    email: EmailStr
+    password: Optional[str] = None  # Secondary login password backup (optional)
+    full_name: str
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    comments: Optional[str] = None
+    firebase_uid: Optional[str] = None
+    role: str = "supporter"
+    app_tag: str = "healthlms"
+
+
+class SupporterProfileUpdate(BaseModel):
+    """Schema for updating personal supporter details."""
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    comments: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -30,6 +55,11 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     specialization: Optional[str] = None
+    phone_number: Optional[str] = None
+    address: Optional[str] = None
+    supporter_comments: Optional[str] = None
+    app_tag: str = "healthlms"
+    firebase_uid: Optional[str] = None
     is_verified: bool
     created_at: datetime
 

@@ -1,27 +1,51 @@
-"""Image upload service: file validation, storage, and thumbnail generation."""
-
 import os
 import uuid
+import base64
+import logging
 from pathlib import Path
 
+import httpx
 from fastapi import UploadFile, HTTPException, status
 from PIL import Image
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".tiff", ".tif", ".bmp", ".webp", ".dcm"}
 THUMBNAIL_MAX_SIZE = (400, 400)
+
+
+async def upload_to_imgbb(content: bytes, name: str) -> dict | None:
+    """Upload image bytes to ImgBB and return URLs."""
+    try:
+        b64 = base64.b64encode(content).decode("utf-8")
+        data = {
+            "key": settings.IMGBB_API_KEY,
+            "image": b64,
+            "name": name,
+        }
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(settings.IMGBB_UPLOAD_URL, data=data)
+            if resp.status_code == 200:
+                res = resp.json()
+                if res.get("success"):
+                    d = res["data"]
+                    return {
+                        "url": d["url"],
+                        "display_url": d["display_url"],
+                        "thumb": d.get("thumb", {}).get("url", d["url"]),
+                        "delete_url": d.get("delete_url"),
+                    }
+    except Exception as e:
+        logger.warning(f"ImgBB upload error: {e}")
+    return None
 
 
 async def save_upload_file(file: UploadFile) -> tuple[str, str | None]:
     """
     Validate, save an uploaded medical image, and generate a thumbnail.
-
-    Args:
-        file: The uploaded file from the request.
-
-    Returns:
-        Tuple of (file_path, thumbnail_path) relative to UPLOAD_DIR.
+    Automatically uploads to ImgBB when available.
 
     Raises:
         HTTPException: If file type is invalid or file is too large.
@@ -80,6 +104,11 @@ async def save_upload_file(file: UploadFile) -> tuple[str, str | None]:
     except Exception:
         # Thumbnail generation is non-critical; continue without it
         thumbnail_path = None
+
+    # Upload to ImgBB
+    imgbb_result = await upload_to_imgbb(content, Path(file.filename or unique_id).stem)
+    if imgbb_result:
+        return imgbb_result["url"], imgbb_result["thumb"]
 
     return f"images/{filename}", thumbnail_path
 

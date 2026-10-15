@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import init_db
-from app.routers import auth, images, annotations, comments, ai, search
+from app.routers import auth, images, annotations, comments, ai, search, supporter, scholar
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -35,11 +35,13 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Include API route modules
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(supporter.router, prefix="/api", tags=["Supporter & Stripe"])
 app.include_router(images.router, prefix="/api/images", tags=["Medical Images"])
 app.include_router(annotations.router, prefix="/api/annotations", tags=["Annotations"])
 app.include_router(comments.router, prefix="/api/comments", tags=["Comments"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI & RAG"])
 app.include_router(search.router, prefix="/api/search", tags=["Search"])
+app.include_router(scholar.router, prefix="/api", tags=["Google Scholar & Academic Search"])
 
 @app.get("/")
 async def root():
