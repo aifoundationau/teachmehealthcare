@@ -16,9 +16,10 @@ import {
   Check,
   KeyRound,
   ExternalLink,
-  Sparkles
+  Sparkles,
+  Briefcase
 } from "lucide-react";
-import { UserProfile, logOutUser, APP_TAG } from "@/lib/firebase";
+import { UserProfile, logOutUser, saveSupporterToFirestore, APP_TAG } from "@/lib/firebase";
 
 interface SupporterProfileModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export default function SupporterProfileModal({
   const [activeTab, setActiveTab] = useState<"payment" | "details">("payment");
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState(user.fullName || "");
+  const [profession, setProfession] = useState(user.profession || "");
   const [phoneNumber, setPhoneNumber] = useState(user.phoneNumber || "");
   const [address, setAddress] = useState(user.address || "");
   const [comments, setComments] = useState(user.comments || "");
@@ -48,9 +50,15 @@ export default function SupporterProfileModal({
   React.useEffect(() => {
     if (isOpen) {
       setActiveTab(focusPayment ? "payment" : "details");
-      setIsEditing(false);
+      // If navigating to details and profession is not provided, start in edit mode to prompt entry
+      setIsEditing(!focusPayment && (!user.profession || !user.phoneNumber));
+      setFullName(user.fullName || "");
+      setProfession(user.profession || "");
+      setPhoneNumber(user.phoneNumber || "");
+      setAddress(user.address || "");
+      setComments(user.comments || "");
     }
-  }, [isOpen, focusPayment]);
+  }, [isOpen, focusPayment, user]);
 
   // Stripe contribution state
   const [selectedAmount, setSelectedAmount] = useState<number>(25);
@@ -75,6 +83,7 @@ export default function SupporterProfileModal({
           },
           body: JSON.stringify({
             full_name: fullName,
+            profession: profession,
             phone_number: phoneNumber,
             address: address,
             comments: comments,
@@ -82,13 +91,26 @@ export default function SupporterProfileModal({
         });
       }
 
-      const updated = {
+      if (user.firebaseUid) {
+        saveSupporterToFirestore(user.firebaseUid, {
+          email: user.email,
+          fullName,
+          profession,
+          phoneNumber,
+          address,
+          comments,
+        });
+      }
+
+      const updated: UserProfile = {
         ...user,
         fullName,
+        profession,
         phoneNumber,
         address,
         comments,
       };
+      localStorage.setItem("tmh_user", JSON.stringify(updated));
       onUserUpdate(updated);
       setIsEditing(false);
     } catch (err) {
@@ -156,12 +178,18 @@ export default function SupporterProfileModal({
               {user.fullName ? user.fullName[0].toUpperCase() : "S"}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-semibold text-white">{user.fullName || "Supporter"}</h2>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 font-medium flex items-center gap-1">
                   <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
                   {user.role ? user.role.toUpperCase() : "SUPPORTER"}
                 </span>
+                {user.profession && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-700/60 font-medium flex items-center gap-1">
+                    <Briefcase className="w-2.5 h-2.5 text-cyan-400" />
+                    {user.profession}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-gray-400">{user.email}</p>
             </div>
@@ -320,7 +348,7 @@ export default function SupporterProfileModal({
                   <span className="text-[10px] text-gray-400 block mb-0.5">Authentication Security</span>
                   <div className="flex items-center gap-1.5 text-emerald-400 font-medium">
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Google + Password Backup</span>
+                    <span>Google OAuth 2.0</span>
                   </div>
                 </div>
               </div>
@@ -353,16 +381,61 @@ export default function SupporterProfileModal({
                 </div>
 
                 {isEditing ? (
-                  <div className="space-y-2.5">
+                  <div className="space-y-3">
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-1">Full Name</label>
                       <input
                         type="text"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1 text-xs text-white"
+                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition-colors"
                       />
                     </div>
+
+                    {/* Profession / Role Field */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] text-gray-300 font-medium flex items-center gap-1.5">
+                          <Briefcase className="w-3 h-3 text-cyan-400" />
+                          Profession / Medical Role
+                        </label>
+                        <span className="text-[9px] text-cyan-400">Select or type</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={profession}
+                        onChange={(e) => setProfession(e.target.value)}
+                        placeholder="e.g. Radiologist, Sonographer, Doctor, Medical Student, Nurse..."
+                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors shadow-inner"
+                      />
+                      {/* Popular Quick-Select Profession Badges */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {[
+                          "Doctor",
+                          "Radiologist",
+                          "Sonographer",
+                          "Medical Student",
+                          "Nurse",
+                          "Healthcare Worker",
+                          "Educator",
+                          "Supporter",
+                        ].map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setProfession(p)}
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                              profession.toLowerCase() === p.toLowerCase()
+                                ? "bg-cyan-500 text-white shadow-sm ring-1 ring-cyan-300 scale-105"
+                                : "bg-[#1f2c3d] text-gray-300 hover:bg-[#28384d] hover:text-white"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-1">Phone Number</label>
                       <input
@@ -370,7 +443,7 @@ export default function SupporterProfileModal({
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
                         placeholder="+61 400 000 000"
-                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1 text-xs text-white"
+                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition-colors"
                       />
                     </div>
                     <div>
@@ -380,7 +453,7 @@ export default function SupporterProfileModal({
                         value={address}
                         onChange={(e) => setAddress(e.target.value)}
                         placeholder="Street, Suburb, Postcode"
-                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1 text-xs text-white"
+                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500 transition-colors"
                       />
                     </div>
                     <div>
@@ -390,20 +463,31 @@ export default function SupporterProfileModal({
                         value={comments}
                         onChange={(e) => setComments(e.target.value)}
                         placeholder="Any medical topics or notes you wish to share..."
-                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1 text-xs text-white resize-none"
+                        className="w-full bg-[#121a24] border border-[#253346] rounded px-2.5 py-1.5 text-xs text-white resize-none focus:outline-none focus:border-cyan-500 transition-colors"
                       />
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-2 text-xs">
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex items-center gap-2">
+                      <Briefcase className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span className="text-gray-400 w-20 shrink-0">Profession:</span>
+                      {profession ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-cyan-950/80 text-cyan-300 border border-cyan-800/60 shadow-sm">
+                          {profession}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 italic">Not provided (click Edit to add)</span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="text-gray-400">Phone:</span>
+                      <span className="text-gray-400 w-20 shrink-0">Phone:</span>
                       <span className="text-gray-200">{phoneNumber || "Not provided"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                      <span className="text-gray-400">Address:</span>
+                      <span className="text-gray-400 w-20 shrink-0">Address:</span>
                       <span className="text-gray-200">{address || "Not provided"}</span>
                     </div>
                     <div className="flex items-start gap-2 pt-1 border-t border-[#253346]/60">

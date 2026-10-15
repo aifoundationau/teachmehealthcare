@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     full_name: str
     role: str = "supporter"  # supporter, doctor, student, admin
     specialization: Optional[str] = None
+    profession: Optional[str] = None
     phone_number: Optional[str] = None
     address: Optional[str] = None
     supporter_comments: Optional[str] = None
@@ -24,6 +25,7 @@ class SupporterRegister(BaseModel):
     email: EmailStr
     password: Optional[str] = None  # Secondary login password backup (optional)
     full_name: str
+    profession: Optional[str] = None
     phone_number: Optional[str] = None
     address: Optional[str] = None
     comments: Optional[str] = None
@@ -35,6 +37,7 @@ class SupporterRegister(BaseModel):
 class SupporterProfileUpdate(BaseModel):
     """Schema for updating personal supporter details."""
     full_name: Optional[str] = None
+    profession: Optional[str] = None
     phone_number: Optional[str] = None
     address: Optional[str] = None
     comments: Optional[str] = None
@@ -55,6 +58,7 @@ class UserResponse(BaseModel):
     full_name: str
     role: str
     specialization: Optional[str] = None
+    profession: Optional[str] = None
     phone_number: Optional[str] = None
     address: Optional[str] = None
     supporter_comments: Optional[str] = None

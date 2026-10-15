@@ -117,6 +117,7 @@ export default function Home() {
           email: parsed.email,
           fullName: parsed.full_name || parsed.fullName || "Alex Lee",
           role: parsed.role || "supporter",
+          profession: parsed.profession,
           phoneNumber: parsed.phone_number || parsed.phoneNumber,
           address: parsed.address,
           comments: parsed.supporter_comments || parsed.comments,
@@ -134,6 +135,7 @@ export default function Home() {
           email: fbUser.email || prev?.email || "",
           fullName: prev?.fullName || fbUser.displayName || "Alex Lee",
           role: prev?.role || "supporter",
+          profession: prev?.profession,
           phoneNumber: prev?.phoneNumber,
           address: prev?.address,
           comments: prev?.comments,
@@ -258,6 +260,7 @@ export default function Home() {
           email: user.email || "",
           fullName: backendResult.fullName || user.displayName || "Supporter User",
           role: backendResult.role || "supporter",
+          profession: backendResult.profession,
           phoneNumber: backendResult.phoneNumber,
           address: backendResult.address,
           comments: backendResult.comments,
@@ -279,11 +282,18 @@ export default function Home() {
       saveSupporterToFirestore(user.uid, {
         email: user.email,
         fullName: user.displayName,
+        profession: profile.profession,
         role: "supporter",
         appTag: APP_TAG,
       });
 
       setCurrentUser(profile);
+
+      // When registering or if profession is not yet provided, open Registered Personal Details
+      if (!profile.profession) {
+        setProfileFocusPayment(false);
+        setIsProfileModalOpen(true);
+      }
     } catch (err: any) {
       console.error("Direct Google auth error:", err);
       setIsAuthModalOpen(true);
@@ -389,6 +399,11 @@ export default function Home() {
                 <span className="text-xs font-semibold text-white max-w-[120px] truncate">
                   {currentUser.fullName}
                 </span>
+                {currentUser.profession && (
+                  <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-medium truncate max-w-[110px]">
+                    {currentUser.profession}
+                  </span>
+                )}
               </button>
               <button
                 type="button"

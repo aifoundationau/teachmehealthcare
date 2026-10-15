@@ -48,6 +48,7 @@ export interface SupporterRegistrationData {
   email: string;
   password: string; // Secondary login password backup
   fullName: string;
+  profession?: string;
   phoneNumber?: string;
   address?: string;
   comments?: string;
@@ -64,6 +65,7 @@ export interface UserProfile {
   fullName: string;
   displayName?: string;
   role: "supporter" | "doctor" | "student" | "admin" | string;
+  profession?: string;
   phoneNumber?: string;
   address?: string;
   comments?: string;
@@ -106,6 +108,7 @@ export function onAuthStateChanged(_unusedAuth: any, callback: AuthCallback): ()
             email: fbUser.email || "",
             fullName: fbUser.displayName || currentCachedUser?.fullName || "Supporter User",
             role: currentCachedUser?.role || "supporter",
+            profession: currentCachedUser?.profession,
             phoneNumber: currentCachedUser?.phoneNumber,
             address: currentCachedUser?.address,
             comments: currentCachedUser?.comments,
@@ -230,6 +233,7 @@ export async function signInWithSecondaryPassword(email: string, password: strin
         email: data.email,
         fullName: data.full_name || "Supporter User",
         role: data.role || "supporter",
+        profession: data.profession,
         phoneNumber: data.phone_number,
         address: data.address,
         comments: data.supporter_comments,
@@ -269,6 +273,7 @@ export async function saveSupporterToFirestore(uid: string, data: Partial<Suppor
           uid: { stringValue: uid },
           email: { stringValue: data.email || "" },
           fullName: { stringValue: data.fullName || "" },
+          profession: { stringValue: data.profession || "" },
           phoneNumber: { stringValue: data.phoneNumber || "" },
           address: { stringValue: data.address || "" },
           comments: { stringValue: data.comments || "" },
@@ -293,6 +298,7 @@ export async function syncSupporterToBackend(data: SupporterRegistrationData): P
     email: data.email,
     password: data.password,
     full_name: data.fullName,
+    profession: data.profession || null,
     phone_number: data.phoneNumber || null,
     address: data.address || null,
     supporter_comments: data.comments || null,
@@ -314,6 +320,7 @@ export async function syncSupporterToBackend(data: SupporterRegistrationData): P
         email: userRes.email,
         fullName: userRes.full_name || data.fullName,
         role: userRes.role || "supporter",
+        profession: userRes.profession || data.profession,
         phoneNumber: userRes.phone_number || data.phoneNumber,
         address: userRes.address || data.address,
         comments: userRes.supporter_comments || data.comments,
@@ -332,6 +339,7 @@ export async function syncSupporterToBackend(data: SupporterRegistrationData): P
     email: data.email,
     fullName: data.fullName,
     role: "supporter",
+    profession: data.profession,
     phoneNumber: data.phoneNumber,
     address: data.address,
     comments: data.comments,

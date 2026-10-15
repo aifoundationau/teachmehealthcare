@@ -32,6 +32,7 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="supporter")
     specialization: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    profession: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     address: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     supporter_comments: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)

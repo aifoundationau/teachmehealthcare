@@ -42,6 +42,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         full_name=user_data.full_name,
         role=role,
         specialization=user_data.specialization,
+        profession=user_data.profession,
         phone_number=user_data.phone_number,
         address=user_data.address,
         supporter_comments=user_data.supporter_comments,
@@ -84,6 +85,8 @@ async def supporter_register(supporter_data: SupporterRegister, db: AsyncSession
             user.hashed_password = hash_password(supporter_data.password)
         if supporter_data.full_name:
             user.full_name = supporter_data.full_name
+        if supporter_data.profession:
+            user.profession = supporter_data.profession
         if supporter_data.phone_number:
             user.phone_number = supporter_data.phone_number
         if supporter_data.address:
@@ -104,6 +107,7 @@ async def supporter_register(supporter_data: SupporterRegister, db: AsyncSession
             hashed_password=hash_password(supporter_data.password) if supporter_data.password else "",
             full_name=supporter_data.full_name,
             role="supporter",
+            profession=supporter_data.profession,
             phone_number=supporter_data.phone_number,
             address=supporter_data.address,
             supporter_comments=supporter_data.comments,
@@ -165,6 +169,8 @@ async def update_current_user_profile(
     """Update personal details for the authenticated supporter."""
     if profile_data.full_name is not None:
         current_user.full_name = profile_data.full_name
+    if profile_data.profession is not None:
+        current_user.profession = profile_data.profession
     if profile_data.phone_number is not None:
         current_user.phone_number = profile_data.phone_number
     if profile_data.address is not None:

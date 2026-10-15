@@ -15,6 +15,7 @@ async def test_full_auth_flow():
             "email": "supporter.sarah@teachmehealth.org",
             "password": "SarahBackupPassword2026!",
             "full_name": "Sarah Jenkins",
+            "profession": "Orthopedic Nurse",
             "phone_number": "+61 412 345 678",
             "address": "42 Collins St, Melbourne VIC 3000",
             "comments": "Specializing in orthopedic nursing and LMS learning resources",
@@ -32,11 +33,13 @@ async def test_full_auth_flow():
         print(f" - Name: {user['full_name']}")
         print(f" - Email: {user['email']}")
         print(f" - Role: {user['role']}")
+        print(f" - Profession: {user.get('profession')}")
         print(f" - App Tag: {user['app_tag']}")
         print(f" - Phone: {user['phone_number']}")
         print(f" - Address: {user['address']}")
         print(f" - Comments: {user['supporter_comments']}")
         assert user["role"] == "supporter"
+        assert user["profession"] == "Orthopedic Nurse"
         assert user["app_tag"] == "healthlms"
 
         # 3. Secondary Login Password Backup test: Login with Email & Secondary Password

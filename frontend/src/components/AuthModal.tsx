@@ -74,6 +74,7 @@ export default function AuthModal({
           email: user.email || "",
           fullName: backendResult.fullName || user.displayName || "Supporter User",
           role: backendResult.role || "supporter",
+          profession: backendResult.profession,
           phoneNumber: backendResult.phoneNumber,
           address: backendResult.address,
           comments: backendResult.comments,
