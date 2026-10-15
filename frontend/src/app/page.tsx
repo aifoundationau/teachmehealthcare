@@ -27,7 +27,16 @@ import LocalizedRegionalNews from "@/components/LocalizedRegionalNews";
 import AcademicResearch from "@/components/AcademicResearch";
 import RelatedScansPanel from "@/components/RelatedScansPanel";
 
-import { UserProfile, APP_TAG, auth, logOutUser, onAuthStateChanged } from "@/lib/firebase";
+import {
+  UserProfile,
+  APP_TAG,
+  auth,
+  logOutUser,
+  onAuthStateChanged,
+  signInWithGooglePopup,
+  syncSupporterToBackend,
+  saveSupporterToFirestore,
+} from "@/lib/firebase";
 import {
   GeoSettings,
   DEFAULT_GEO_SETTINGS,
@@ -227,6 +236,62 @@ export default function Home() {
     }
   };
 
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+
+  const handleDirectGoogleAuth = async () => {
+    setIsAuthLoading(true);
+    try {
+      const user = await signInWithGooglePopup();
+      let profile: UserProfile;
+      try {
+        const backendResult = await syncSupporterToBackend({
+          email: user.email || "",
+          password: "",
+          fullName: user.displayName || "Supporter User",
+          role: "supporter",
+          appTag: APP_TAG,
+          firebaseUid: user.uid,
+        });
+        profile = {
+          id: backendResult.id,
+          firebaseUid: user.uid,
+          email: user.email || "",
+          fullName: backendResult.fullName || user.displayName || "Supporter User",
+          role: backendResult.role || "supporter",
+          phoneNumber: backendResult.phoneNumber,
+          address: backendResult.address,
+          comments: backendResult.comments,
+          appTag: APP_TAG,
+          photoURL: user.photoURL,
+          accessToken: backendResult.accessToken,
+        };
+      } catch {
+        profile = {
+          firebaseUid: user.uid,
+          email: user.email || "",
+          fullName: user.displayName || "Supporter User",
+          role: "supporter",
+          appTag: APP_TAG,
+          photoURL: user.photoURL,
+        };
+      }
+
+      saveSupporterToFirestore(user.uid, {
+        email: user.email,
+        fullName: user.displayName,
+        role: "supporter",
+        appTag: APP_TAG,
+      });
+
+      setCurrentUser(profile);
+    } catch (err: any) {
+      console.error("Direct Google auth error:", err);
+      setIsAuthModalOpen(true);
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-[#070b11] text-gray-200 font-sans select-none overflow-x-hidden">
       {/* Top Header matching mockup exactly */}
@@ -268,77 +333,73 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Right: Student Portal & Location Badge + Auth Controls */}
+        {/* Right: Only Google Login / Register Button */}
         <div className="flex items-center gap-2.5 shrink-0">
-          {/* Student Portal Profile Pill matching screenshot */}
-          <div
-            onClick={() => setIsProfileModalOpen(true)}
-            className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#131c2a] border border-[#223145] hover:border-cyan-500/50 cursor-pointer transition-colors shadow-sm"
-            title="Student Portal Profile & LMS Settings"
-          >
-            <div className="flex flex-col text-right leading-tight">
-              <span className="text-xs font-semibold text-white">
-                {currentUser?.fullName || "Student Portal"}
-              </span>
-              <span className="text-[10px] text-cyan-400 font-semibold tracking-wider">
-                {currentUser?.role ? currentUser.role.toUpperCase() : "SUPPORTER"}
-              </span>
-            </div>
-
-            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-xs shadow">
-              {currentUser?.fullName ? currentUser.fullName[0].toUpperCase() : "A"}
-            </div>
-          </div>
-
-          {/* Support LMS Button - Forces guest registration first, then opens payment gateway */}
-          <button
-            type="button"
-            id="support-lms-button"
-            onClick={handleSupportLmsClick}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white text-xs font-semibold shadow-md border border-rose-400/40 transition-all hover:scale-[1.02]"
-            title="Support Teach Me Healthcare LMS Development & Learning Infrastructure"
-          >
-            <Heart className="w-3.5 h-3.5 fill-white text-white" />
-            <span>Support LMS</span>
-          </button>
-
-          {/* Authentication & Profile Action Buttons */}
           {!currentUser ? (
-            <div className="hidden sm:flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSupportPrompt(false);
-                  setAuthModalMode("login");
-                  setIsAuthModalOpen(true);
-                }}
-                className="px-2.5 py-1 text-xs text-gray-300 hover:text-white rounded hover:bg-[#182332] transition-colors"
-              >
-                Log On
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSupportPrompt(false);
-                  setAuthModalMode("register");
-                  setIsAuthModalOpen(true);
-                }}
-                className="px-3 py-1 bg-[#131c2a] hover:bg-[#1a2538] border border-[#223145] text-cyan-300 rounded text-xs font-medium transition-all"
-              >
-                Register
-              </button>
-            </div>
+            <button
+              type="button"
+              id="google-auth-button"
+              onClick={handleDirectGoogleAuth}
+              disabled={isAuthLoading}
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-900 text-xs font-bold shadow-md border border-gray-200 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+              title="Login or Register with Google"
+            >
+              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                />
+              </svg>
+              <span>{isAuthLoading ? "Connecting to Google..." : "Login / Register"}</span>
+            </button>
           ) : (
-            <div className="hidden sm:flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setProfileFocusPayment(false);
                   setIsProfileModalOpen(true);
                 }}
-                className="px-2.5 py-1 text-xs text-gray-300 hover:text-white rounded hover:bg-[#182332] transition-colors"
+                className="flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#131c2a] border border-[#223145] hover:border-cyan-500/50 cursor-pointer transition-colors shadow-sm"
+                title="Profile & Settings"
               >
-                Profile
+                {currentUser.photoURL ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt={currentUser.fullName}
+                    className="w-5 h-5 rounded-full object-cover border border-cyan-400"
+                  />
+                ) : (
+                  <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-[10px]">
+                    {currentUser.fullName ? currentUser.fullName[0].toUpperCase() : "U"}
+                  </div>
+                )}
+                <span className="text-xs font-semibold text-white max-w-[120px] truncate">
+                  {currentUser.fullName}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentUser(null);
+                  logOutUser();
+                }}
+                className="px-2 py-1 text-[11px] text-gray-400 hover:text-white rounded hover:bg-[#182332] transition-colors"
+                title="Log Out"
+              >
+                Log Out
               </button>
             </div>
           )}
