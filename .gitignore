@@ -1,12 +1,47 @@
-
+# Dependencies
 node_modules/
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Python & Databases
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 *.db
+.venv/
+venv/
+
+# Environment Variables & Secrets
 .env
 .env.*
+.env.local
+.env*.local
 backend/.env
 frontend/.env.local
-.venv/
-skill-creator/
+frontend/.env*.local
+!.env.example
+!frontend/.env.example
+!backend/.env.example
 
+# Next.js & Builds
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Testing & Coverage
+coverage/
+
+# Logs & Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor
+.DS_Store
+*.pem
+.vercel
+skill-creator/
