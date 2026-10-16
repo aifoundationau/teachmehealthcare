@@ -11,6 +11,8 @@ import {
   User as FirebaseUser,
 } from "firebase/auth";
 
+import { apiFetch } from "@/lib/api";
+
 export const APP_TAG = process.env.NEXT_PUBLIC_APP_TAG || "healthlms";
 
 export const firebaseConfig = {
@@ -195,71 +197,6 @@ export async function signInWithGooglePopup(): Promise<{
 }
 
 /**
- * Links a secondary Email & Password credential to the current Google user account.
- * This provides the secondary login password backup if Google fails.
- */
-export async function linkSecondaryBackupPassword(password: string, emailOverride?: string) {
-  const email = emailOverride || currentCachedUser?.email || "supporter.student@teachmehealthcare.org";
-  if (currentCachedUser) {
-    currentCachedUser = {
-      ...currentCachedUser,
-      email,
-    };
-    notifyAuthState(currentCachedUser);
-  }
-  return {
-    uid: currentCachedUser?.firebaseUid || `usr-${Date.now()}`,
-    email,
-  };
-}
-
-/**
- * Sign in using Email & Secondary Backup Password
- * Works as the fallback login method if Google is unavailable
- */
-export async function signInWithSecondaryPassword(email: string, password: string): Promise<UserProfile> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-  try {
-    const res = await fetch(`${apiUrl}/api/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const profile: UserProfile = {
-        id: data.id,
-        email: data.email,
-        fullName: data.full_name || "Supporter User",
-        role: data.role || "supporter",
-        profession: data.profession,
-        phoneNumber: data.phone_number,
-        address: data.address,
-        comments: data.supporter_comments,
-        appTag: data.app_tag || APP_TAG,
-        accessToken: data.access_token,
-      };
-      notifyAuthState(profile);
-      return profile;
-    }
-  } catch (err) {
-    console.warn("Backend auth failed, falling back to local verification:", err);
-  }
-
-  // Fallback local verification
-  const profile: UserProfile = {
-    id: 1,
-    email,
-    fullName: email.split("@")[0].replace(".", " "),
-    role: "supporter",
-    appTag: APP_TAG,
-  };
-  notifyAuthState(profile);
-  return profile;
-}
-
-/**
  * Save or update supporter profile in Firestore with special tag 'healthlms'
  */
 export async function saveSupporterToFirestore(uid: string, data: Partial<SupporterRegistrationData>) {
@@ -289,31 +226,29 @@ export async function saveSupporterToFirestore(uid: string, data: Partial<Suppor
 }
 
 /**
- * Sync supporter registration details to the FastAPI backend database
+ * Sync supporter registration details to the site's API. The server takes the email
+ * and account identity from the signed-in user's Firebase token, so only the profile
+ * details are sent.
  */
 export async function syncSupporterToBackend(data: SupporterRegistrationData): Promise<UserProfile> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
   const payload = {
-    email: data.email,
-    password: data.password,
     full_name: data.fullName,
     profession: data.profession || null,
     phone_number: data.phoneNumber || null,
     address: data.address || null,
-    supporter_comments: data.comments || null,
-    app_tag: APP_TAG,
-    firebase_uid: data.firebaseUid || null,
+    comments: data.comments || null,
   };
 
   try {
-    const res = await fetch(`${apiUrl}/api/auth/supporter-register`, {
+    const res = await apiFetch("/auth/supporter-register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
-    if (res.ok) {
+    if (!res.ok) {
+      const error = await res.json().catch(() => null);
+      console.warn("Backend sync rejected:", res.status, error?.detail);
+    } else {
       const userRes = await res.json();
       const profile: UserProfile = {
         id: userRes.id,

@@ -71,6 +71,20 @@ export default function GeolocationModal({
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectStatus, setDetectStatus] = useState<string | null>(null);
 
+  // Start from the current settings each time the dialog opens (and drop cancelled edits).
+  React.useEffect(() => {
+    if (!isOpen) return;
+    setSuburb(settings.suburb);
+    setState(settings.state);
+    setPostcode(settings.postcode);
+    setCountry(settings.country);
+    setTimezone(settings.timezone);
+    setDateFormat(settings.dateFormat);
+    setTimeFormat(settings.timeFormat);
+    setDetectStatus(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const currentPreviewSettings: GeoSettings = {

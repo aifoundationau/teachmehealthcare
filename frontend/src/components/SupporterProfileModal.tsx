@@ -20,6 +20,7 @@ import {
   Briefcase
 } from "lucide-react";
 import { UserProfile, logOutUser, saveSupporterToFirestore, APP_TAG } from "@/lib/firebase";
+import { apiFetch } from "@/lib/api";
 
 interface SupporterProfileModalProps {
   isOpen: boolean;
@@ -46,9 +47,11 @@ export default function SupporterProfileModal({
   const [address, setAddress] = useState(user.address || "");
   const [comments, setComments] = useState(user.comments || "");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   React.useEffect(() => {
     if (isOpen) {
+      setSaveError(null);
       setActiveTab(focusPayment ? "payment" : "details");
       // If navigating to details and profession is not provided, start in edit mode to prompt entry
       setIsEditing(!focusPayment && (!user.profession || !user.phoneNumber));
@@ -70,25 +73,28 @@ export default function SupporterProfileModal({
 
   const handleSaveDetails = async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
-      const token = localStorage.getItem("tmh_token");
-
-      if (token) {
-        await fetch(`${baseUrl}/auth/me`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            full_name: fullName,
-            profession: profession,
-            phone_number: phoneNumber,
-            address: address,
-            comments: comments,
-          }),
-        });
+      const res = await apiFetch("/auth/me", {
+        method: "PUT",
+        body: JSON.stringify({
+          full_name: fullName,
+          profession: profession,
+          phone_number: phoneNumber,
+          address: address,
+          comments: comments,
+        }),
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => null);
+        console.warn("Profile save rejected:", res.status, error?.detail);
+        // Invalid details (e.g. a malformed phone number): keep the form open so they can be fixed.
+        if (res.status === 422) {
+          setSaveError(
+            typeof error?.detail === "string" ? error.detail : "Some details are invalid. Please check and try again."
+          );
+          return;
+        }
       }
 
       if (user.firebaseUid) {
@@ -121,21 +127,19 @@ export default function SupporterProfileModal({
   };
 
   const handleStripeContribution = async () => {
+    const amount = customAmount ? parseFloat(customAmount) : selectedAmount;
+    if (!Number.isFinite(amount) || amount < 5 || amount > 10000) {
+      setStripeMessage("Please enter an amount between $5 and $10,000 AUD.");
+      return;
+    }
+
     setIsStripeLoading(true);
     setStripeMessage(null);
     try {
-      const amount = customAmount ? parseFloat(customAmount) : selectedAmount;
       const amountCents = Math.round(amount * 100);
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
-      const token = localStorage.getItem("tmh_token");
-
-      const response = await fetch(`${baseUrl}/supporter/create-checkout-session`, {
+      const response = await apiFetch("/supporter/create-checkout-session", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         body: JSON.stringify({
           amount_cents: amountCents,
           currency: "aud",
@@ -146,7 +150,10 @@ export default function SupporterProfileModal({
       });
 
       if (!response.ok) {
-        throw new Error("Unable to create Stripe checkout session");
+        const error = await response.json().catch(() => null);
+        throw new Error(
+          typeof error?.detail === "string" ? error.detail : "Unable to create Stripe checkout session"
+        );
       }
 
       const data = await response.json();
@@ -382,6 +389,11 @@ export default function SupporterProfileModal({
 
                 {isEditing ? (
                   <div className="space-y-3">
+                    {saveError && (
+                      <p role="alert" className="text-[11px] text-amber-300 bg-amber-950/40 p-2 rounded border border-amber-800/40">
+                        {saveError}
+                      </p>
+                    )}
                     <div>
                       <label className="text-[10px] text-gray-400 block mb-1">Full Name</label>
                       <input

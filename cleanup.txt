@@ -1,0 +1,410 @@
+TEACH ME HEALTHCARE - CODE AUDIT AND CLEANUP LIST
+Audited: 16 October 2026. Scope: every file in the repository - the website (frontend/src), the
+new Next.js backend (frontend/src/server, frontend/src/app/api, frontend/scripts), the old Python
+backend (backend/), configuration, dependencies and the live Firebase settings.
+
+NOTHING IN THIS LIST HAS BEEN CHANGED. Review it and decide what to clean up.
+(The bugs that stopped functions working were already fixed; they are listed in working.txt.)
+
+Each item: priority, what is wrong, where (file:line), why it matters, suggested change, effort.
+  Priority:  HIGH = security risk or misleading content   MEDIUM = worth doing soon
+             LOW = tidy-up
+  Effort:    small = under an hour   medium = a few hours   large = a day or more
+
+SUGGESTED ORDER
+  1. S1-S6  security and privacy
+  2. C1-C2  invented references and claims (content)
+  3. D1-D4  delete dead code (quick, safe, and removes an exposed key)
+  4. S7 then the lint list (D5)  turn type checking back on, clear the warnings
+  5. A1-A4  accessibility
+  Everything else when convenient.
+
+Totals: 8 HIGH, 22 MEDIUM, 29 LOW (59 items).
+
+
+=====================================================================================
+1. SECURITY AND PRIVACY
+=====================================================================================
+
+S1  HIGH  Next.js 14.2.35 has known security advisories (1 critical, plus postcss high)
+    Where:  frontend/package.json ("next": "14.2.35")
+    Why:    npm audit reports a critical advisory (denial of service via the image optimizer
+            and others) and high-severity postcss issues. No 14.x release fixes them.
+    Change: upgrade to Next.js 16.4.1 or later. This needs React 19 and some code changes
+            (route params become async). Test the whole site afterwards (working.txt lists
+            every function).
+    Effort: medium-large
+
+S2  HIGH  Firebase 10.14.1 pulls in vulnerable packages (@grpc/grpc-js high, undici high,
+          @firebase/firestore high, 8 moderate)
+    Where:  frontend/package.json ("firebase": "^10.14.1")
+    Change: upgrade to firebase 13; re-test Google sign-in. Then remove the direct "undici" and
+            "idb" dependencies if the build passes without them (they were added as a workaround).
+    Effort: medium
+
+S3  HIGH  Firestore lets anyone list the "supporters" collection without signing in
+    Where:  Firebase console > Firestore > Rules; written by frontend/src/lib/firebase.ts:204
+            (saveSupporterToFirestore)
+    Why:    A test request with no sign-in got HTTP 200 for the list of supporters. It is empty
+            today, but any record saved there (name, phone, address) would be public.
+            The app writes to it without sending a sign-in token, so the rules either reject
+            every write (feature broken) or must allow anyone to write (worse).
+    Change: the new Postgres database now stores profiles, so the simplest fix is to remove
+            saveSupporterToFirestore and its 4 callers and lock the rules:
+              match /supporters/{uid} { allow read, write: if request.auth.uid == uid; }
+            If you need the Firestore copy, write it with the Firestore SDK as the signed-in
+            user instead of the REST URL.
+    Effort: small
+
+S4  HIGH  Firebase authorised domains include "vercel.app" and other projects' domains
+    Where:  Firebase console > Authentication > Settings > Authorised domains
+            Current: localhost, ai-foundation-firebase.firebaseapp.com, ...web.app, 127.0.0.1,
+            aifoundationweb.vercel.app, vercel.app, g-class-builder.vercel.app,
+            aifoundation.net.au, pro-lms-c44d1.firebaseapp.com
+    Why:    "vercel.app" allows ANY website hosted on Vercel to run your Google sign-in, which
+            makes convincing phishing pages possible.
+    Change: remove "vercel.app"; add only this site's exact production domain. Remove domains of
+            other projects unless they really share this Firebase project.
+    Effort: small
+
+S5  HIGH  ImgBB API key is hard-coded in browser code and committed to git (twice)
+    Where:  frontend/src/lib/imgbb.ts:7 and frontend/src/lib/medicalData.ts:13
+    Why:    Anyone can read it and upload to (or fill) your ImgBB account. The server now has its
+            own copy in IMGBB_API_KEY, and neither browser copy is used.
+    Change: delete both constants (see D2, D3), then create a new key at imgbb.com and put it
+            only in IMGBB_API_KEY (Vercel settings / .env.local). Old key stays in git history,
+            so rotating it is what actually closes the hole.
+    Effort: small
+
+S6  HIGH  Uploaded scans are public on ImgBB, and only hidden photo data is removed
+    Where:  frontend/src/server/imgbb.ts (your decision this session was to keep ImgBB)
+    Why:    Anyone with an image link can view it. Removing EXIF data does not remove patient
+            names or IDs burned into the image pixels, which is common on X-rays and scans.
+    Change: at minimum, make uploaders confirm the image is de-identified (there is an
+            "is_anonymized" field; require it to be true before upload). Longer term, a
+            private store (Firebase Storage / Vercel Blob) with expiring links.
+    Effort: small (confirmation) / medium (private store)
+
+S7  MEDIUM  Type checking and lint are switched off for builds
+    Where:  frontend/next.config.mjs (typescript.ignoreBuildErrors, eslint.ignoreDuringBuilds)
+    Why:    Errors ship to production silently. Type checking now passes with 0 errors.
+    Change: remove ignoreBuildErrors now; remove ignoreDuringBuilds after the lint list (D5).
+    Effort: small
+
+S8  MEDIUM  A fake type file switches off type checking for all Firebase code
+    Where:  frontend/src/types/firebase.d.ts (35 lint warnings)
+    Why:    It declares firebase/app, firebase/auth and firebase/firestore as "any", hiding real
+            mistakes. This is how page.tsx read a field that didn't exist (fixed this session).
+    Change: delete the file; the real Firebase types are installed. Fix any errors that appear.
+    Effort: small
+
+S9  MEDIUM  Personal details are cached in browser storage
+    Where:  "tmh_user" in localStorage: frontend/src/lib/firebase.ts, src/app/page.tsx,
+            src/components/SupporterProfileModal.tsx
+    Why:    Phone, address and comments stay in the browser (readable by any script on the page,
+            and by the next person on a shared computer until Log Out).
+    Change: cache only id, name and role; load the rest from /api/auth/me when the profile opens.
+    Effort: small
+
+S10 MEDIUM  Exact GPS position is sent to OpenStreetMap
+    Where:  frontend/src/lib/geoSettings.ts:117
+    Why:    data-contracts.md says coordinates are rounded to 2 decimal places (~1 km);
+            the code sends full precision.
+    Change: round lat/lon to 2 decimals before building the URL.
+    Effort: small
+
+S11 LOW  Stripe secret (test) key visible in the Stripe MCP command line
+    Where:  Not in this repo: Antigravity starts "@stripe/mcp --api-key=sk_test_..." and the key
+            shows in the process list.
+    Why:    Any program on the PC can read it. Harmless for a test key; never do this with the
+            live key.
+    Change: pass the key to the MCP through an environment variable instead.
+    Effort: small
+
+S12 LOW  backend/.env holds secrets for the retired Python backend
+    Change: keep GEMINI_API_KEY / IMGBB_API_KEY / STRIPE_* in frontend/.env.local and Vercel,
+            then delete backend/ with D1.
+    Effort: small
+
+
+=====================================================================================
+2. CONTENT AND CORRECTNESS
+=====================================================================================
+
+C1  HIGH  The 6 "curated" research articles and 6 news items are invented
+    Where:  frontend/src/lib/medicalData.ts ("academic" and "news" in each scan)
+    Why:    Every PubMed ID, PMC ID and DOI was checked: none matches its article. Links open
+            unrelated papers (e.g. glaucoma knowledge in Taiwan, pig carcass quality, soil
+            carbon). Some news is credited to real bodies ("Queensland Health Newsroom",
+            "Australian Journal of Rural Health"). On a medical education site this misleads
+            students and risks the organisation's credibility.
+    Change: replace with verified references (title, authors, journal, year, PMID and abstract
+            taken from PubMed), or clearly label them "illustrative example". Same for news.
+    Effort: medium
+
+C2  HIGH  Payment box makes claims the site may not be able to make
+    Where:  frontend/src/components/SupporterProfileModal.tsx:334 and :336
+    Why:    "100% Tax Deductible Supporter Receipt" is only true if AI Foundation has DGR status
+            and issues receipts; "PCI DSS Level 1 Certified" is Stripe's certification, not this
+            site's.
+    Change: confirm DGR status or remove the tax claim; reword to "Payments processed securely
+            by Stripe".
+    Effort: small
+
+C3  MEDIUM  "100+" modalities claimed; the list has 87
+    Where:  frontend/src/components/RelatedScansPanel.tsx:64, :173, :186
+    Change: say "87" (or "80+"), or add the missing items.
+    Effort: small
+
+C4  MEDIUM  Same "Clinical Relevance" text on every news article
+    Where:  frontend/src/components/LocalizedRegionalNews.tsx:104 (always mentions mycoplasma and
+            viral pneumonias, even under the Brain MRI)
+    Change: move this text into each article's data, or remove it.
+    Effort: small
+
+C5  MEDIUM  Failures are hidden from the user
+    Where:  frontend/src/lib/firebase.ts:272 (syncSupporterToBackend "graceful fallback");
+            SupporterProfileModal profile save (non-validation errors still update the screen)
+    Why:    If the server is down or rejects the sign-up, the user still looks registered, and
+            nothing was saved.
+    Change: show an error and let them retry.
+    Effort: small
+
+C6  MEDIUM  data-contracts.md no longer describes the system
+    Where:  data-contracts.md
+    Why:    It describes FastAPI/Pydantic, a backup password, SQLite, text-embedding-004 and
+            "ImgBB ... immutable". The site now uses Next.js, Google-only sign-in, Postgres with
+            pgvector and gemini-embedding-2 (768 dimensions); DICOM uploads are refused; other
+            users see only public author fields.
+    Change: update it (it calls itself the single source of truth).
+    Effort: medium
+
+C7  LOW  Index items without their own image show another scan's image
+    Where:  frontend/src/app/page.tsx:176 (handleSelectDocumentModality), :193
+    Why:    Picking e.g. "Endoscopy" shows the chest X-ray image with "Endoscopy" findings.
+    Change: show a "no sample image yet" placeholder for those items.
+    Effort: small
+
+C8  LOW  Ruler "millimetres" are invented
+    Where:  frontend/src/components/DiagnosticViewer.tsx:96 (fixed 2.8 mm per 1% of the screen)
+    Why:    Real measurements need the scan's pixel spacing; the value changes with window size.
+    Change: label as "approx." or show screen units.
+    Effort: small
+
+C9  LOW  Article window always says "Year: >= 2000"
+    Where:  frontend/src/components/AcademicResearch.tsx:485
+    Change: show the article's real year.
+    Effort: small
+
+C10 LOW  "W/L" readout shows brightness that can never change
+    Where:  frontend/src/components/DiagnosticViewer.tsx:34 (brightnessLevel has no control)
+    Change: add a brightness control or drop it from the readout.
+    Effort: small
+
+C11 LOW  Signed-out chat users appear as "Alex Lee"
+    Where:  frontend/src/app/page.tsx:546 and :605; CollaborativeCaseroom default prop
+    Change: use "Guest".
+    Effort: small
+
+C12 LOW  "Localized" news ignores the user's location
+    Where:  frontend/src/components/LocalizedRegionalNews.tsx (suburb/state props unused)
+    Change: sort or filter articles by the user's state, or rename the panel.
+    Effort: small
+
+C13 LOW  No condition search on phones
+    Where:  frontend/src/app/page.tsx (header search is "hidden md:block")
+    Change: add a search icon to the phone tab bar.
+    Effort: small
+
+C14 LOW  HR footer link uses http (https works)
+    Where:  frontend/src/app/page.tsx:636
+    Effort: small
+
+
+=====================================================================================
+3. DEAD CODE AND UNUSED FILES
+=====================================================================================
+
+D1  MEDIUM  Old Python backend is no longer used
+    Where:  backend/ (app/, requirements.txt, test_auth_api.py, verify_backend.py, .env, test.db,
+            uploads/) and the root uploads/ folder
+    Change: delete once the new backend is deployed (git keeps the history).
+    Effort: small
+
+D2  MEDIUM  frontend/src/lib/imgbb.ts is never imported
+    Why:    Browser-side ImgBB upload; also exposes the key (S5).
+    Change: delete the file.
+    Effort: small
+
+D3  MEDIUM  Unused ImgBB constants in the scan data
+    Where:  frontend/src/lib/medicalData.ts:13-15
+    Change: delete the 3 lines.
+    Effort: small
+
+D4  MEDIUM  Unreachable "Support" sign-up flow and unused props
+    Where:  frontend/src/app/page.tsx:234 (handleSupportLmsClick: nothing calls it since the
+            header redesign), isSupportPrompt/authModalMode state, AuthModal "supportPrompt" and
+            "initialMode" props
+    Change: delete, or add the "Support" button back if you want guests to see it.
+    Effort: small
+
+D5  MEDIUM  84 lint problems in the original code (35 unused names, 47 "any", 2 image warnings)
+    Unused imports/variables:
+      src/app/page.tsx: User, Bell, Sparkles, Heart, LogIn, ALL_MODALITIES_DOCUMENT_LIST,
+                        handleSupportLmsClick
+      src/components/AcademicResearch.tsx: searchSource (set but never shown)
+      src/components/AuthModal.tsx: ExternalLink
+      src/components/CollaborativeCaseroom.tsx: Send, User, Sparkles, MessageSquare, isStudent
+      src/components/DiagnosticViewer.tsx: RotateCw, Ruler, Eye, EyeOff, Maximize2, Annotation,
+                        onSelectRelatedScan prop
+      src/components/GeolocationModal.tsx: Calendar, Globe2, unused "err"
+      src/components/LocalizedRegionalNews.tsx: ExternalLink, suburb, state
+      src/components/RelatedScansPanel.tsx: useRef, Filter, ChevronRight, Check, X, onUploadScan
+      src/components/SupporterProfileModal.tsx: Mail, KeyRound, ExternalLink
+    "any" types: 35 in src/types/firebase.d.ts (S8), 12 across page.tsx, firebase.ts and
+      the components (mostly "catch (err: any)").
+    Change: remove the unused names; replace "any" with real types. "npx next lint" lists them.
+    Effort: small-medium
+
+D6  MEDIUM  Scan upload is wired up but has no button
+    Where:  onUploadScan / handleUploadScan passed through page.tsx (3 places) and
+            RelatedScansPanel.tsx, never called
+    Change: either build the upload button (the API exists: POST /api/images, doctors only)
+            or remove the plumbing.
+    Effort: small (remove) / medium (build)
+
+D7  LOW  frontend/src/lib/firebase.ts leftovers
+    Where:  :152 "export const db = {}" (unused); :27 GOOGLE_CLIENT_ID (unused); :51 "password"
+            field and role/appTag in SupporterRegistrationData (ignored by the server);
+            accessToken/token/user in UserProfile (never set); "tmh_token" removal at logout
+            (never stored any more)
+    Effort: small
+
+D8  LOW  Classroom "..." menu button does nothing
+    Where:  frontend/src/components/CollaborativeCaseroom.tsx:100
+    Effort: small
+
+D9  LOW  Five scan images in frontend/public/scans/ are committed but never used
+    Why:    The site loads the same images from ImgBB.
+    Change: delete them, or use them instead of ImgBB (faster, no third-party dependency).
+    Effort: small
+
+D10 LOW  Fonts downloaded but never used
+    Where:  frontend/src/app/layout.tsx:5-14 loads Geist; src/app/globals.css:20 forces Arial and
+            Tailwind's font-sans isn't mapped to Geist
+    Change: apply Geist (map fontFamily in tailwind.config.ts) or stop loading it.
+    Effort: small
+
+D11 LOW  Template leftovers
+    Where:  src/app/globals.css (light/dark colour variables and .text-balance unused - the site
+            uses hard-coded dark colours); frontend/README.md (mostly the create-next-app text)
+    Effort: small
+
+D12 LOW  Two package setups and two lockfiles
+    Where:  root package.json (npm workspace duplicating next/react) and root package-lock.json
+            (out of date) beside frontend/package.json + frontend/package-lock.json
+    Change: pick one. With Vercel's root set to frontend/, delete the root package files.
+    Effort: small
+
+D13 LOW  Duplicated Google sign-in logic
+    Where:  page.tsx:249 (handleDirectGoogleAuth) and AuthModal.tsx:52 (handleGoogleAuth) are
+            ~50 near-identical lines
+    Change: move into one function in lib/firebase.ts.
+    Effort: small
+
+
+=====================================================================================
+4. CODE QUALITY
+=====================================================================================
+
+Q1  MEDIUM  Viewer and classroom are rendered twice on desktop
+    Where:  frontend/src/app/page.tsx:539 and :584 (desktop copy + hidden phone copy)
+    Why:    Double work on every update, and duplicate HTML ids (the arrow marker "#arrowhead").
+    Change: render one copy based on screen width.
+    Effort: small
+
+Q2  MEDIUM  page.tsx is one 760-line component
+    Change: split the header, footer and layout sections into components.
+    Effort: medium
+
+Q3  MEDIUM  No automated website tests in the repository
+    Why:    The 43-check browser test used for working.txt lives outside the repo.
+    Change: add it as a Playwright test so every change can be re-checked.
+    Effort: small
+
+Q4  LOW  Colours hard-coded as hex values in every component (#0d141f, #182332, ...)
+    Change: define them once as Tailwind theme colours.
+    Effort: medium
+
+Q5  LOW  Browser storage keys scattered across files
+    Where:  tmh_user, tmh_token, tmh_geo_settings, tmh_last_scholar_search
+    Change: one small module that owns them.
+    Effort: small
+
+Q6  LOW  lib/firebase.ts mixes four jobs (Firebase sign-in, local user cache, Firestore REST,
+         server sync)
+    Change: split by job.
+    Effort: small
+
+Q7  LOW  Two <img> tags trigger Next.js image warnings (page.tsx:406, RelatedScansPanel.tsx:102)
+    Change: optional; next/image would resize thumbnails automatically.
+    Effort: small
+
+Q8  LOW  Scan cases are hard-coded (662-line data file)
+    Why:    The new backend can store images, annotations and comments, but the viewer still
+            shows only the 5 built-in cases.
+    Change: larger feature (load cases from /api/images); note only.
+    Effort: large
+
+
+=====================================================================================
+5. ACCESSIBILITY
+=====================================================================================
+
+A1  MEDIUM  No text on the site can be selected or copied
+    Where:  frontend/src/app/page.tsx:312 ("select-none" on the page wrapper)
+    Change: remove it there; keep it only on the image viewer.
+    Effort: small
+
+A2  MEDIUM  Icon-only buttons have no name for screen readers (0 aria-labels in the site)
+    Where:  close buttons (X / ✕) in every dialog, the classroom "..." button
+    Change: add aria-label="Close" etc.
+    Effort: small
+
+A3  MEDIUM  Scan cards and Index items can't be used with a keyboard
+    Where:  clickable <div>s in RelatedScansPanel.tsx (scan cards, Index items)
+    Change: use <button> elements.
+    Effort: small
+
+A4  LOW  Dialogs don't close with Escape, trap keyboard focus, or announce themselves
+    Change: add role="dialog", Escape to close, focus handling.
+    Effort: small-medium
+
+A5  LOW  Much of the text is 9-11 px, and some grey-on-black text has low contrast
+    Effort: medium
+
+
+=====================================================================================
+6. NEW BACKEND (BUILT THIS SESSION) - KNOWN FOLLOW-UPS
+=====================================================================================
+
+B1  MEDIUM  Uploads over 4.5 MB fail on Vercel
+    Why:    Vercel limits request size; ImgBB allows 32 MB.
+    Change: send large files straight to storage from the browser (needs a store that supports
+            signed uploads, e.g. Vercel Blob), or keep scans under 4.5 MB.
+    Effort: medium
+
+B2  MEDIUM  Without DATABASE_URL, any host other than Vercel quietly uses a local database file
+    Where:  frontend/src/server/db/index.ts
+    Why:    On a host with temporary disks, data would be lost on restart.
+    Change: allow the built-in database only in development.
+    Effort: small
+
+B3  LOW  No admin screen for roles; use "npm run set-role -- email doctor"
+B4  LOW  No way to delete a comment; deleting an image doesn't delete it from ImgBB
+B5  LOW  Adding an annotation or comment waits 1-2 s for Gemini to index it
+    Change: index in the background.
+B6  LOW  The "1 search per minute" limit trusts the client_id parameter and the forwarded IP,
+         so a determined user can get around it (fine for its purpose)
+B7  LOW  data-contracts.md asks for personal details to be removed from AI questions before
+         they are indexed; not implemented (the old backend didn't either)

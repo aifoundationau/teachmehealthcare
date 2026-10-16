@@ -31,19 +31,18 @@ export default function RelatedScansPanel({
   onSelectDocumentModality,
   onUploadScan,
 }: RelatedScansPanelProps) {
+  // Category filter for the Index dialog only; the scan list below is filtered by its search box.
   const [selectedCategory, setSelectedCategory] = useState<string>("All Modalities");
   const [searchQuery, setSearchQuery] = useState("");
   const [isBrowseModalOpen, setIsBrowseModalOpen] = useState(false);
 
   // Filter scans
   const filteredScans = scans.filter((s) => {
-    const matchesCategory =
-      selectedCategory === "All Modalities" || s.category.includes(selectedCategory) || selectedCategory.includes(s.modality);
     const matchesSearch =
       s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.finding.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.modality.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesSearch;
   });
 
   return (

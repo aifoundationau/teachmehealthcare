@@ -15,6 +15,7 @@ import {
   RotateCcw
 } from "lucide-react";
 import { AcademicArticle } from "@/lib/medicalData";
+import { apiFetch } from "@/lib/api";
 
 export interface ScholarArticleResult {
   id: string;
@@ -122,10 +123,7 @@ export default function AcademicResearch({
     setCooldownRemaining(60);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api";
-      const res = await fetch(
-        `${baseUrl}/scholar/search?q=${encodeURIComponent(term)}`
-      );
+      const res = await apiFetch(`/scholar/search?q=${encodeURIComponent(term)}`);
 
       if (!res.ok) {
         throw new Error(`Academic search failed (${res.status})`);

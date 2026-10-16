@@ -1,0 +1,205 @@
+TEACH ME HEALTHCARE - FUNCTION CHECK
+Tested: 15-16 October 2026, on the rebuilt site (Next.js backend), production build.
+
+HOW IT WAS TESTED
+- Browser: a script clicked through every feature in Chrome at desktop (1440px), tablet (1024px)
+  and phone (390px) widths: 43 checks.
+- Server: an automated test of all API routes against a throwaway database (npm run test:api):
+  31 checks.
+- Live services: Gemini AI with your key, Stripe in TEST mode with your test key, Google Scholar,
+  PubMed Central, OpenStreetMap, Google/Firebase sign-in configuration.
+- Production build (npm run build) succeeds; type check reports 0 errors.
+
+RESULT
+Every function works. 14 bugs were found and fixed (marked FIXED below). Nothing about how the site
+looks or what it does was redesigned. 3 things need a check by you (marked YOUR CHECK), because
+they need your Google account or would publish something. Known limitations are marked LIMITATION.
+
+One serious content problem was found and NOT changed, because fixing it means choosing real
+medical references, which you should approve (see "CONTENT PROBLEM" below).
+
+Status key:
+  WORKS       tested and working, unchanged
+  FIXED       was broken, fixed and re-tested
+  NOT FIXED   broken, needs your decision
+  YOUR CHECK  could not be completed by me; how to check is given
+  LIMITATION  works as built, but not as the label suggests (see cleanup.txt)
+
+
+=====================================================================================
+CONTENT PROBLEM (NOT FIXED)
+=====================================================================================
+The 6 "curated" research articles shown under each scan are not real publications. Every
+PubMed ID, PMC ID and DOI was checked against PubMed, PubMed Central and Crossref: none matches
+the article shown. They point to unrelated papers or to nothing. Examples:
+  - "Efficacy of Multimodal Scans ... in Lobar Pneumonia Diagnosis" (shown with the chest X-ray):
+    its "View Publication" link opens a study on glaucoma knowledge in Taiwan (PMC10928472).
+  - "Differential Diagnosis of Pulmonary Consolidation and Effusion": PMID 38472911 is a study
+    of pig carcass and meat quality; the DOI does not exist.
+  - "Diffusion-Weighted MRI vs Non-Contrast CT in Early Stroke Triage": PMID 39019284 is a review
+    of soil carbon in urban green spaces.
+The 6 regional news items are also invented, and some are credited to real organisations
+("Queensland Health Newsroom", "Australian Journal of Rural Health").
+Recommendation: replace them with verified references (I can find real, relevant PubMed
+articles for each scan for you to approve), or label them clearly as illustrative examples.
+Data file: frontend/src/lib/medicalData.ts
+
+
+=====================================================================================
+WEBSITE
+=====================================================================================
+
+PAGE
+  WORKS       Page loads: header, scan viewer, classroom, news, research, footer
+  FIXED       Browser tab title said "Create Next App"; now "Teach Me Healthcare"
+  FIXED       Every page load threw React errors #418/#423/#425 and the page was thrown away
+              and redrawn. Cause: the footer clock was baked into the page at build time, so it
+              never matched the visitor's clock. The clock now starts after the page loads.
+  WORKS       All 10 scan images and thumbnails load
+
+HEADER
+  WORKS       Condition search (e.g. "Effusion" opens the CT Thorax case)
+  FIXED       Search with no match did nothing; now shows "No scan matches ..."
+  WORKS       Login / Register opens the Google sign-in popup (Google sign-in is enabled in
+              Firebase, and localhost is an authorised domain)
+  WORKS       Closing the popup without signing in shows the sign-in dialog again
+  YOUR CHECK  Completing a real Google sign-in. I can't sign in as you. The server side is tested:
+              it verifies Google's signature on every request and takes the email from the token.
+              To check: run the site, click Login / Register and sign in; open your profile and
+              save a detail (e.g. profession); click Log Out (this clears the browser's copy);
+              sign in again - the detail should come back, because it now comes from the server.
+  WORKS       Signed-in header shows name and profession; Log Out returns to Login / Register
+  FIXED       After a page reload, the signed-in user lost their Firebase ID (the page read the
+              wrong field), which also stopped profile saves from reaching Firestore
+
+RELATED SCANS PANEL
+  WORKS       Clicking a scan card / "View Scan" opens it
+  WORKS       Filter box narrows the list
+  WORKS       Index dialog: category buttons filter the list; picking an item opens a case
+  LIMITATION  Most Index items have no image of their own. Picking one opens the sample scan of
+              the same type (any CT item opens the CT Thorax sample) or creates a case that reuses
+              the current image.
+  FIXED       Choosing a category in the Index silently hid scans in the side list (1 of 5 shown,
+              with no way to see why)
+  LIMITATION  There is no "upload scan" button, although the code is wired for one
+
+DIAGNOSTIC VIEWER
+  WORKS       Zoom in / out buttons, drag to pan, overlay toggle, contrast presets
+              (100 -> 140 -> 180), invert, annotation label toggle, Reset
+  FIXED       Mouse-wheel zoom: the browser ignored the code's request to stop the page scrolling
+              (console error "Unable to preventDefault inside passive event listener")
+  FIXED       Ruler/measurement kept changing after the mouse button was released
+  FIXED       Every scan (Brain MRI, ultrasound...) showed the chest X-ray label "Lower Lobe
+              Opacity / Infiltration"; each scan now shows its own finding
+
+COLLABORATIVE CLASSROOM
+  WORKS       Send a message; a faculty reply arrives about a second later
+  FIXED       If you switched scans while a reply was pending, the reply appeared in the new
+              scan's chat
+  LIMITATION  Replies are scripted, messages are not saved or shared with other users, and
+              signed-out users post as "Alex Lee"
+
+LOCALIZED REGIONAL NEWS
+  WORKS       [Read] opens the article; Close closes it
+  NOT FIXED   The news items are invented (see CONTENT PROBLEM above)
+  LIMITATION  Not actually localised: the articles belong to each scan and do not change with
+              your suburb or state
+
+ACADEMIC RESEARCH
+  WORKS       Curated articles: [Read] opens the abstract, and the links open
+  NOT FIXED   ...but every curated article is invented and its links open unrelated papers
+              (see CONTENT PROBLEM above)
+  WORKS       Live search: returned 10 Google Scholar results. Google usually blocks searches
+              from cloud servers; the site then falls back to PubMed Central automatically.
+  WORKS       One search per minute: countdown in the browser, also enforced by the server
+  WORKS       Reset returns to the curated articles; "Google Scholar" button opens Scholar
+
+LOCATION SETTINGS (Geotag button, bottom right)
+  WORKS       Suburb, state, postcode, country, timezone, date and time format; the footer
+              updates and settings survive a reload
+  WORKS       Detect Location (GPS + OpenStreetMap): detected "Parkwood, QLD" from test GPS
+  FIXED       The dialog opened with old values (and kept cancelled edits), not your settings
+  FIXED       Saving "Melbourne" was replaced by "Parkwood, QLD" on every reload
+  FIXED       The default "Parkwood, QLD" used Melbourne's timezone, so the clock was an hour
+              out during daylight saving; it now uses Brisbane time
+
+PROFILE AND SUPPORT PAYMENTS
+  WORKS       Edit and save personal details (name, profession, phone, address, comments)
+  FIXED       Invalid details (e.g. a malformed phone number) looked saved but weren't; the
+              error is now shown and the form stays open
+  WORKS       $10 / $25 / $50 / $100 or a custom amount: "Contribute" goes to Stripe Checkout
+              (tested in TEST mode: a real checkout.stripe.com page opened; nothing was charged)
+  FIXED       Amounts under $5 showed a raw technical error; now "Please enter an amount between
+              $5 and $10,000 AUD."
+  YOUR CHECK  The extra copy of profiles kept in Firestore (saveSupporterToFirestore). My write
+              test was blocked as a change to a shared system. Firestore currently returns the
+              "supporters" list to anyone (no sign-in needed) and it is empty, so these writes
+              are probably being rejected. Check the rules in Firebase console > Firestore >
+              Rules (see cleanup.txt, security section).
+
+FOOTER
+  WORKS       AI, LMS, HR, Trades and PT links all open (new tab); the HR link uses http
+  WORKS       Geotag button shows suburb, state and the live clock
+
+LAYOUTS
+  WORKS       Tablet: "Related Scans" drawer opens and selects a scan
+  WORKS       Phone: Viewer, Related Scans, Classroom Chat, Regional News and NCBI Research tabs
+  LIMITATION  Phones have no condition search (the header search is hidden below 768px)
+
+
+=====================================================================================
+SERVER (API) - all 14 routes
+=====================================================================================
+  WORKS       /api/health
+  WORKS       Sign-in checks: requests with no token, a forged token, a token for another
+              Firebase project, or an unverified email are refused
+  WORKS       /api/auth/supporter-register and /api/auth/me (read and update profile);
+              email, role and account ID come from the verified token, never the request
+  WORKS       /api/images: list (with filters), view, delete (owner/admin only; deletes its
+              annotations, comments and search entries)
+  WORKS       Image upload checks: doctors/admins only, rejects non-images and DICOM, removes
+              hidden photo details (EXIF) before upload
+  YOUR CHECK  The final upload to ImgBB was not run, because it would publish a test image to
+              your album. To check: make yourself a doctor (npm run set-role -- you@email doctor),
+              then upload a scan through the API.
+  WORKS       Annotations: add (doctors/admins), list, edit and delete (author/admin only),
+              with validation of finding types and on-image coordinates
+  WORKS       Comments and threaded replies (any signed-in user)
+  WORKS       AI image analysis (live, Gemini 3.8 Flash): full structured report on the sample
+              chest X-ray in about 16 seconds, with the educational disclaimer
+  WORKS       AI question answering (live): answers from doctors' notes in about 9 seconds, cites
+              its sources, ignores notes below the 0.65 similarity threshold
+  WORKS       Semantic search (live Gemini embeddings): pneumonia question ranked the pneumonia
+              note first (0.76) and the fracture note last (0.63)
+  WORKS       /api/scholar/search with the one-per-minute limit
+  WORKS       /api/supporter/config and /api/supporter/create-checkout-session (Stripe TEST mode)
+  WORKS       Database: migration creates all tables and the vector index; local development
+              database starts automatically with no setup
+
+
+=====================================================================================
+BEFORE GOING LIVE
+=====================================================================================
+1. Create a Postgres database with pgvector (e.g. Neon), put its address in DATABASE_URL, and
+   run: npm run db:migrate
+2. In Vercel, set DATABASE_URL, GEMINI_API_KEY, IMGBB_API_KEY, STRIPE_SECRET_KEY,
+   STRIPE_PUBLISHABLE_KEY and FIREBASE_PROJECT_ID (see frontend/.env.example).
+   Switch the Stripe keys from test to live when you are ready to take real payments.
+3. Do the 3 YOUR CHECK items above.
+
+
+=====================================================================================
+FILES CHANGED FOR THE FIXES
+=====================================================================================
+  frontend/src/app/layout.tsx                      tab title
+  frontend/src/app/page.tsx                        clock, default location, search message,
+                                                   Firebase ID after reload
+  frontend/src/lib/geoSettings.ts                  helper: has the user saved a location?
+  frontend/src/components/GeolocationModal.tsx     dialog shows current settings
+  frontend/src/components/DiagnosticViewer.tsx     wheel zoom, ruler, per-scan label
+  frontend/src/components/CollaborativeCaseroom.tsx  pending replies on scan change
+  frontend/src/components/RelatedScansPanel.tsx    Index category no longer hides the list
+  frontend/src/components/SupporterProfileModal.tsx  amount check, save errors shown
+
+Test side effects: 2 Stripe TEST checkout sessions (they expire on their own) and a few Gemini
+API calls. No real payments, no uploads, and nothing written to Firestore.

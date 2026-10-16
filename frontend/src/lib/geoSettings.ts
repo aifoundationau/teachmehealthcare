@@ -24,6 +24,16 @@ export const DEFAULT_GEO_SETTINGS: GeoSettings = {
 
 const STORAGE_KEY = "tmh_geo_settings";
 
+/** True once the user has saved their own location settings. */
+export function hasStoredGeoSettings(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function getStoredGeoSettings(): GeoSettings {
   if (typeof window === "undefined") return DEFAULT_GEO_SETTINGS;
   try {

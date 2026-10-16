@@ -16,10 +16,16 @@ export default function CollaborativeCaseroom({
   const [messages, setMessages] = useState<CaseroomMessage[]>(scan.caseroom);
   const [inputValue, setInputValue] = useState("");
   const [isAiTyping, setIsAiTyping] = useState(false);
+  const replyTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // When scan changes, update messages to the new scan's caseroom
+  // When scan changes, update messages to the new scan's caseroom and drop pending replies
   React.useEffect(() => {
     setMessages(scan.caseroom);
+    setIsAiTyping(false);
+    return () => {
+      replyTimers.current.forEach(clearTimeout);
+      replyTimers.current = [];
+    };
   }, [scan]);
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -41,7 +47,8 @@ export default function CollaborativeCaseroom({
     setIsAiTyping(true);
 
     // Simulate Physician / Teacher pedagogical response
-    setTimeout(() => {
+    const timer = setTimeout(() => {
+      replyTimers.current = replyTimers.current.filter((t) => t !== timer);
       let replyMessage = "";
       let sender = "Dr. Sarah Jennings";
       let role: "Physician" | "Teacher" = "Physician";
@@ -76,6 +83,7 @@ export default function CollaborativeCaseroom({
       setMessages((prev) => [...prev, aiReply]);
       setIsAiTyping(false);
     }, 1200);
+    replyTimers.current.push(timer);
   };
 
   return (

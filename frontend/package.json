@@ -6,25 +6,39 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx scripts/migrate.ts",
+    "set-role": "tsx scripts/set-role.ts",
+    "test:api": "tsx scripts/api-smoke-test.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.10",
+    "@electric-sql/pglite-pgvector": "^0.0.11",
+    "@google/genai": "^2.30.0",
+    "drizzle-orm": "^0.45.4",
     "firebase": "^10.14.1",
     "idb": "^7.1.1",
-    "undici": "^6.19.7",
+    "jose": "^6.2.12",
     "lucide-react": "^1.40.0",
     "next": "14.2.35",
+    "postgres": "^3.4.9",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "sharp": "^0.35.5",
+    "undici": "^6.19.7",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^8",
     "eslint-config-next": "14.2.35",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

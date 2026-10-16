@@ -41,6 +41,7 @@ import {
   GeoSettings,
   DEFAULT_GEO_SETTINGS,
   getStoredGeoSettings,
+  hasStoredGeoSettings,
   formatDateTime,
 } from "@/lib/geoSettings";
 import {
@@ -48,6 +49,17 @@ import {
   INITIAL_MEDICAL_SCANS,
   ALL_MODALITIES_DOCUMENT_LIST,
 } from "@/lib/medicalData";
+
+// Location shown until the user saves their own: Parkwood, QLD (Queensland has no daylight saving).
+const DEFAULT_LOCATION: GeoSettings = {
+  ...DEFAULT_GEO_SETTINGS,
+  suburb: "Parkwood",
+  state: "QLD",
+  postcode: "4214",
+  timezone: "Australia/Brisbane",
+  latitude: null,
+  longitude: null,
+};
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -58,18 +70,16 @@ export default function Home() {
   const [profileFocusPayment, setProfileFocusPayment] = useState(true);
 
   // Geolocation & regional settings state
-  const [geoSettings, setGeoSettings] = useState<GeoSettings>({
-    ...DEFAULT_GEO_SETTINGS,
-    suburb: "Parkwood",
-    state: "QLD",
-  });
+  const [geoSettings, setGeoSettings] = useState<GeoSettings>(DEFAULT_LOCATION);
   const [isGeoModalOpen, setIsGeoModalOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  // Set after mount: a time rendered on the server would never match the browser's clock.
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   // Active scan & diagnostics state
   const [activeScan, setActiveScan] = useState<MedicalScanItem>(INITIAL_MEDICAL_SCANS[0]);
   const [cohortScans, setCohortScans] = useState<MedicalScanItem[]>(INITIAL_MEDICAL_SCANS);
   const [searchCondition, setSearchCondition] = useState("");
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
 
   // Universal Responsive active tab for small/mobile devices (< 768px)
   const [mobileTab, setMobileTab] = useState<"viewer" | "scans" | "caseroom" | "news" | "academic">(
@@ -79,23 +89,14 @@ export default function Home() {
 
   // Initialize geo settings & clock timer
   useEffect(() => {
-    const stored = getStoredGeoSettings();
-    if (stored && stored.suburb !== "Melbourne") {
-      setGeoSettings(stored);
-    } else {
-      // Default to Parkwood, QLD matching screenshot reference
-      setGeoSettings({
-        ...DEFAULT_GEO_SETTINGS,
-        suburb: "Parkwood",
-        state: "QLD",
-      });
-    }
+    setGeoSettings(hasStoredGeoSettings() ? getStoredGeoSettings() : DEFAULT_LOCATION);
 
     const handleGeoChange = () => {
       setGeoSettings(getStoredGeoSettings());
     };
     window.addEventListener("geoSettingsChanged", handleGeoChange);
 
+    setCurrentTime(new Date());
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -128,12 +129,14 @@ export default function Home() {
       }
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (fbUser: any) => {
+    // The callback receives this app's UserProfile (see lib/firebase.ts), not a Firebase User.
+    const unsubscribe = onAuthStateChanged(auth, (fbUser: UserProfile | null) => {
       if (fbUser) {
         setCurrentUser((prev) => ({
-          firebaseUid: fbUser.uid,
+          id: prev?.id,
+          firebaseUid: fbUser.firebaseUid,
           email: fbUser.email || prev?.email || "",
-          fullName: prev?.fullName || fbUser.displayName || "Alex Lee",
+          fullName: prev?.fullName || fbUser.fullName || "Alex Lee",
           role: prev?.role || "supporter",
           profession: prev?.profession,
           phoneNumber: prev?.phoneNumber,
@@ -163,6 +166,9 @@ export default function Home() {
     if (found) {
       setActiveScan(found);
       setMobileTab("viewer");
+      setSearchMessage(null);
+    } else {
+      setSearchMessage(`No scan matches "${searchCondition.trim()}"`);
     }
   };
 
@@ -335,11 +341,22 @@ export default function Home() {
             <input
               type="text"
               value={searchCondition}
-              onChange={(e) => setSearchCondition(e.target.value)}
+              onChange={(e) => {
+                setSearchCondition(e.target.value);
+                setSearchMessage(null);
+              }}
               placeholder="Search medical conditions (e.g., Pneumonia, Atelectasis, Pleural Effusion...)"
               className="w-full bg-[#131c2a] border border-[#223145] rounded-full py-1.5 pl-9 pr-4 text-xs text-white placeholder-gray-400 focus:outline-none focus:border-cyan-500 shadow-inner transition-colors"
             />
             <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            {searchMessage && (
+              <div
+                role="status"
+                className="absolute left-4 top-full mt-1 px-2 py-0.5 rounded bg-[#131c2a] border border-[#223145] text-[11px] text-amber-300 shadow z-40"
+              >
+                {searchMessage}
+              </div>
+            )}
           </div>
         </form>
 
@@ -652,7 +669,7 @@ export default function Home() {
             </span>
             <span className="text-gray-600">|</span>
             <span className="font-mono text-cyan-300 text-[10px]">
-              {formatDateTime(currentTime, geoSettings, true)}
+              {currentTime ? formatDateTime(currentTime, geoSettings, true) : ""}
             </span>
             <Sliders className="w-3 h-3 text-gray-400 group-hover:text-cyan-400 ml-0.5 shrink-0" />
           </button>

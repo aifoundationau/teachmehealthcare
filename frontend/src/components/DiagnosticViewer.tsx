@@ -40,6 +40,8 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
     current: { x: number; y: number } | null;
     distanceMm: number | null;
   }>({ start: null, current: null, distanceMm: null });
+  // True only while the mouse button is held down during a measurement.
+  const [isMeasuring, setIsMeasuring] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -51,12 +53,19 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
     setCustomRuler({ start: null, current: null, distanceMm: null });
   }, [scan.id, scan.image]);
 
-  // Mouse wheel zoom
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom((prev) => Math.min(Math.max(0.4, Number((prev + delta).toFixed(2))), 4.0));
-  };
+  // Mouse wheel zoom. React's onWheel is passive, so preventDefault() there can't stop the
+  // page from scrolling; a native non-passive listener can.
+  React.useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom((prev) => Math.min(Math.max(0.4, Number((prev + delta).toFixed(2))), 4.0));
+    };
+    stage.addEventListener("wheel", handleWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", handleWheel);
+  }, []);
 
   // Pan / Drag handlers
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -70,6 +79,7 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
         current: { x: clickX, y: clickY },
         distanceMm: 0,
       });
+      setIsMeasuring(true);
       return;
     }
 
@@ -78,7 +88,8 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isRulerActive && customRuler.start && stageRef.current) {
+    if (isRulerActive) {
+      if (!isMeasuring || !customRuler.start || !stageRef.current) return;
       const rect = stageRef.current.getBoundingClientRect();
       const currentX = ((e.clientX - rect.left) / rect.width) * 100;
       const currentY = ((e.clientY - rect.top) / rect.height) * 100;
@@ -102,6 +113,7 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    setIsMeasuring(false);
   };
 
   const handleReset = () => {
@@ -115,6 +127,9 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
     setIsRulerActive(false);
     setCustomRuler({ start: null, current: null, distanceMm: null });
   };
+
+  // On-image label: the scan's primary finding, e.g. "Lower Lobe Opacity / Infiltration".
+  const [labelMain, labelSub] = (scan.annotations[0]?.label ?? "").split(" / ");
 
   return (
     <div className="w-full h-full flex-1 flex flex-col bg-[#0b1017] rounded-xl border border-[#1b2636] shadow-xl overflow-hidden min-w-0">
@@ -143,10 +158,10 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
       {/* Main Image Stage */}
       <div
         ref={stageRef}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
         className={`relative flex-1 w-full h-full min-h-[460px] sm:min-h-[520px] bg-black overflow-hidden select-none flex items-center justify-center ${
           isRulerActive ? "cursor-crosshair" : isDragging ? "cursor-grabbing" : "cursor-grab"
         }`}
@@ -314,15 +329,17 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
           )}
 
           {/* Diagnostic Label text overlay - matches screenshot text position */}
-          {showAnnotations && (
+          {showAnnotations && labelMain && (
             <div className="absolute bottom-[8%] left-[36%] z-20 pointer-events-none">
               <div className="flex flex-col items-center">
                 <span className="text-white text-xs sm:text-sm font-semibold tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-black/40 px-2.5 py-0.5 rounded backdrop-blur-xs">
-                  Lower Lobe Opacity
+                  {labelMain}
                 </span>
-                <span className="text-cyan-300 text-[11px] sm:text-xs font-medium tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                  / Infiltration
-                </span>
+                {labelSub && (
+                  <span className="text-cyan-300 text-[11px] sm:text-xs font-medium tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                    / {labelSub}
+                  </span>
+                )}
               </div>
             </div>
           )}
