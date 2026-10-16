@@ -57,8 +57,8 @@ const DEFAULT_LOCATION: GeoSettings = {
   state: "QLD",
   postcode: "4214",
   timezone: "Australia/Brisbane",
-  latitude: null,
-  longitude: null,
+  latitude: -27.9547,
+  longitude: 153.3773,
 };
 
 export default function Home() {

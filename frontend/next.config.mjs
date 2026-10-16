@@ -7,8 +7,19 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  webpack: (config) => {
+  webpack: (config, { dev }) => {
     config.resolve.symlinks = false;
+    if (dev) {
+      config.watchOptions = {
+        ignored: [
+          '**/node_modules/**',
+          '**/.next/**',
+          '**/.git/**',
+          '**/.venv/**',
+          '**/backend/**',
+        ],
+      };
+    }
     return config;
   },
   experimental: {
@@ -18,4 +29,3 @@ const nextConfig = {
 };
 
 export default nextConfig;
-
