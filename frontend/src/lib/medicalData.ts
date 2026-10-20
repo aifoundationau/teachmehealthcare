@@ -38,14 +38,15 @@ export interface AcademicArticle {
   id: string;
   title: string;
   excerpt: string;
+  /** Summary of the published abstract; the full abstract is on PubMed. */
   abstract: string;
   journal: string;
   authors: string;
   year: number;
+  /** The article links to this PubMed record, so it must be the article's own PMID. */
   pmid: string;
   pmcid?: string;
   doi: string;
-  ncbiUrl: string;
 }
 
 export interface MedicalScanItem {
@@ -55,6 +56,8 @@ export interface MedicalScanItem {
   modality: "X-Ray" | "CT" | "MRI" | "Ultrasound" | "Nuclear Medicine" | "Fluoroscopy" | "Endoscopy" | "Electrophysiology" | "Pathology" | "Clinical Record" | (string & {});
   patientCase: string;
   finding: string;
+  /** Literature search terms; the finding is radiology shorthand that searches poorly. */
+  researchQuery?: string;
   badge: string;
   image: string;
   thumbnail: string;
@@ -93,6 +96,7 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     modality: "X-Ray",
     patientCase: "#4029",
     finding: "RML & RLL Consolidation (Pneumonia)",
+    researchQuery: "chest radiograph community-acquired pneumonia adults",
     badge: "CHEST X-RAY (A-P VIEW)",
     image: "https://i.ibb.co/xQx79T8/cxr-ap.jpg",
     thumbnail: "https://i.ibb.co/8V17vZ4/cxr-ap.jpg",
@@ -179,28 +183,26 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     academic: [
       {
         id: "acad-1",
-        title: "Efficacy of Multimodal Scans (X-Ray, MRI, CT) in Lobar Pneumonia Diagnosis",
-        excerpt: "A retrospective cohort study evaluating the diagnostic accuracy of chest radiographs and MRIs in identifying complex pulmonary infections...",
-        abstract: "BACKGROUND: Accurate differentiation of bacterial lobar consolidation from acute respiratory distress or malignant atelectasis remains challenging in acute care. METHODS: We evaluated 1,420 prospective patients undergoing initial CXR followed by high-resolution CT and thoracic MRI. RESULTS: Multimodal correlation demonstrated a diagnostic sensitivity of 94.2% (95% CI: 91.8-96.1%) for combined CXR and thoracic ultrasound, providing non-inferior accuracy to CT in remote resource-limited healthcare environments.",
-        journal: "Journal of Thoracic Imaging",
-        authors: "Jennings S, Vance M, Chen E, et al.",
-        year: 2025,
-        pmid: "39201482",
-        pmcid: "PMC10928472",
-        doi: "10.1097/RTI.0000000000000812",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10928472/"
+        title: "Imaging of pneumonia: trends and algorithms",
+        excerpt: "Review of how imaging is used to diagnose and manage pneumonia, and which radiographic patterns point to which causes.",
+        abstract: "Review of the imaging methods used to diagnose and follow pulmonary infection. Imaging should always begin with conventional chest radiography, and CT is considered mandatory when radiographs are inconclusive. Recognising the pattern of involvement in its clinical setting is the most useful approach: in patients who are not immunosuppressed, a segmental lobar infiltrate suggests bacterial pneumonia, whereas in patients with AIDS diffuse ground-glass and interstitial infiltrates most often indicate Pneumocystis pneumonia. Combinations of parenchymal and pleural abnormalities can suggest further diagnoses, and knowing the range of radiographic appearances narrows the differential diagnosis and guides further tests and follow-up.",
+        journal: "European Respiratory Journal",
+        authors: "Franquet T.",
+        year: 2001,
+        pmid: "11510793",
+        doi: "10.1183/09031936.01.00213501"
       },
       {
         id: "acad-2",
-        title: "Differential Diagnosis of Pulmonary Consolidation and Effusion in Clinical Practice",
-        excerpt: "Understanding radiological variations between pleural effusion and consolidation is critical for timely therapeutic interventions...",
-        abstract: "CLINICAL REVIEW: The radiological presence of air bronchograms versus compressive passive atelectasis provides the cornerstone for distinguishing pure parenchymal infection from pleural space disease. We detail algorithmic management protocols for rural general practitioners dealing with evolving parapneumonic effusions.",
-        journal: "The Lancet Respiratory Medicine",
-        authors: "Morrison K, Alvarez D, Patel R.",
-        year: 2024,
-        pmid: "38472911",
-        doi: "10.1016/S2213-2600(24)00045-8",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pubmed/38472911"
+        title: "The diagnosis of pneumonia requires a chest radiograph (x-ray)-yes, no or sometimes?",
+        excerpt: "Debate on whether a chest radiograph should be required to diagnose community-acquired pneumonia.",
+        abstract: "Many international guidelines recommend a chest radiograph whenever pneumonia is suspected, because radiographs are relatively inexpensive and confirm or exclude lung consolidation. However, radiographs are not available in the community setting and delay diagnosis and treatment, so guidelines for mild community-acquired pneumonia treated in primary care give criteria for a clinical diagnosis. The authors debate whether clinical features alone are reliable enough, and note studies showing poor agreement between readers of chest radiographs, which calls into question the radiograph's role as the final arbiter of diagnosis.",
+        journal: "Pneumonia",
+        authors: "Wootton D, Feldman C.",
+        year: 2014,
+        pmid: "31641570",
+        pmcid: "PMC5922324",
+        doi: "10.15172/pneu.2014.5/464"
       }
     ]
   },
@@ -211,6 +213,7 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     modality: "X-Ray",
     patientCase: "#4029",
     finding: "RLL Retrocardiac Opacification",
+    researchQuery: "lateral chest radiograph pneumonia",
     badge: "CHEST X-RAY (LATERAL VIEW)",
     image: "https://i.ibb.co/ccLsYp2b/cxr-lateral.jpg",
     thumbnail: "https://i.ibb.co/Kjw8KQVN/cxr-lateral.jpg",
@@ -272,15 +275,26 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     academic: [
       {
         id: "acad-lat-1",
-        title: "The Diagnostic Accuracy of the Radiographic 'Spine Sign' in Pneumonia",
-        excerpt: "Evaluating sensitivity and specificity of lateral thoracic radiography in retrocardiac pulmonary opacities...",
-        abstract: "A multicenter retrospective study of 890 patients assessing sensitivity (89.4%) and specificity (92.1%) of the spine sign in detecting posterior basal segment pneumonias.",
-        journal: "Radiology",
-        authors: "Vance M, Jennings S, Taylor H.",
-        year: 2024,
-        pmid: "37810294",
-        doi: "10.1148/radiol.2024230188",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pubmed/37810294"
+        title: "Value of the “spine sign” on lateral chest views",
+        excerpt: "How well the spine sign on a lateral chest radiograph detects lower chest abnormalities, judged against CT.",
+        abstract: "Retrospective study of 200 patients who had a lateral chest radiograph and a chest CT within one week. Two radiologists read the lateral views independently; the spine sign was positive when the normal progressive increase in lucency down the vertebral bodies was absent or reversed. Against CT, the two readers' sensitivity was 60% and 70%, specificity 64% and 84%, positive predictive value 91% and 97% and negative predictive value 19% and 29%, with inter-reader agreement (kappa) ranging from 0.12 to 0.68. Plate-like atelectasis, ground-glass opacity, pleural effusion and consolidation were the abnormalities most often behind a positive sign. The sign has moderate sensitivity but a good positive predictive value, especially when the lucency gradient is reversed, and does not by itself identify the cause.",
+        journal: "British Journal of Radiology",
+        authors: "Medjek M, Hackx M, Ghaye B, et al.",
+        year: 2015,
+        pmid: "25827203",
+        pmcid: "PMC4628440",
+        doi: "10.1259/bjr.20140378"
+      },
+      {
+        id: "acad-lat-2",
+        title: "Lateral chest radiograph: a systematic approach",
+        excerpt: "A step-by-step method for reading the lateral chest radiograph, a view increasingly undervalued in the CT era.",
+        abstract: "Educational review arguing that the lateral chest radiograph remains a valuable source of information although it has become increasingly undervalued since chest CT became widely available. Getting the most from it requires a systematic reading: an overview first, then the airway and major hilar structures, then the three areas where the image darkens in the absence of visible structure edges, and finally the periphery and the upper abdomen. The article explains the value of each of these features in turn.",
+        journal: "Academic Radiology",
+        authors: "Feigin DS.",
+        year: 2010,
+        pmid: "20817573",
+        doi: "10.1016/j.acra.2010.07.004"
       }
     ]
   },
@@ -291,6 +305,7 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     modality: "CT",
     patientCase: "#4029",
     finding: "Lower Lobe Infiltration & Effusion",
+    researchQuery: "parapneumonic effusion computed tomography",
     badge: "CT THORAX (AXIAL CONTRAST)",
     image: "https://i.ibb.co/SwVwWCrS/ct-thorax.jpg",
     thumbnail: "https://i.ibb.co/m5h51W8p/ct-thorax.jpg",
@@ -360,16 +375,25 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     academic: [
       {
         id: "acad-ct-1",
-        title: "High-Resolution CT Predictors of Complicated Parapneumonic Effusion",
-        excerpt: "CT density, pleural thickening, and septations as indicators for chest tube drainage...",
-        abstract: "A prospective investigation of 450 CT scans examining attenuation values and pleural split signs to identify fluid requiring early tube thoracostomy.",
-        journal: "American Journal of Respiratory and Critical Care Medicine",
-        authors: "Jennings S, Vance M, O'Connor B.",
-        year: 2025,
-        pmid: "39102488",
-        pmcid: "PMC11029384",
-        doi: "10.1164/rccm.202410-1892OC",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC11029384/"
+        title: "Role of Chest Computed Tomography in Patients Hospitalized with Community-Acquired Complicated Parapneumonic Effusion or Empyema",
+        excerpt: "CT findings that predict a prolonged hospital stay in pneumonia complicated by parapneumonic effusion or empyema.",
+        abstract: "Patients hospitalised with community-acquired pneumonia were divided into those with complicated parapneumonic effusion (CPPE) or empyema and a control group. Length of stay was longer with CPPE or empyema (median 13 vs 8 days, p < 0.001), but 30-day and in-hospital mortality did not differ. Among patients with CPPE or empyema, three factors independently predicted a stay of 14 days or more: increased attenuation of the extrapleural fat on CT (OR 2.26), pleural microbubbles on CT (OR 3.93) and Pneumonia Severity Index class IV–V (OR 2.79). These findings may help identify patients who need more intensive evaluation and intervention.",
+        journal: "The American Journal of the Medical Sciences",
+        authors: "Park JE, Cha SI, Shin KM, et al.",
+        year: 2022,
+        pmid: "34848186",
+        doi: "10.1016/j.amjms.2021.07.018"
+      },
+      {
+        id: "acad-ct-2",
+        title: "Computed tomography and ultrasound in parapneumonic effusions and empyema",
+        excerpt: "Whether CT and ultrasound appearances reflect the stage of pleural infection or predict the need for surgery.",
+        abstract: "Fifty patients with parapneumonic effusions had thoracic CT, and 36 also had ultrasound; imaging features were compared with the stage of the effusion and the clinical outcome. On CT, pleural enhancement was present in every patient, pleural thickening in 92% and thickening of the extrapleural fat in 76%, and pleural thickness tended to increase with the stage of infection. However, pleural and extrapleural thickness on CT was not significantly related to the stage of the effusion or the need for surgery, and the ultrasound appearance (anechoic, hyperechoic, or hyperechoic with septations) was unrelated to the presence of pus, the stage or the need for surgery. CT and ultrasound confirm the diagnosis and guide drainage, but neither reliably stages pleural infection or predicts which patients will need surgery after failed chest tube drainage and fibrinolytics.",
+        journal: "Clinical Radiology",
+        authors: "Kearney SE, Davies CW, Davies RJ, et al.",
+        year: 2000,
+        pmid: "10924379",
+        doi: "10.1053/crad.1999.0480"
       }
     ]
   },
@@ -380,6 +404,7 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     modality: "Ultrasound",
     patientCase: "#4029",
     finding: "Subpleural Consolidation & Pleural Effusion",
+    researchQuery: "lung ultrasound pneumonia diagnosis",
     badge: "THORACIC ULTRASOUND (B-MODE)",
     image: "https://i.ibb.co/Rk5yK0mz/ultrasound-thoracic.jpg",
     thumbnail: "https://i.ibb.co/G4hTD2Lc/ultrasound-thoracic.jpg",
@@ -449,15 +474,26 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     academic: [
       {
         id: "acad-us-1",
-        title: "Diagnostic Performance of Point-of-Care Lung Ultrasound in Remote Settings",
-        excerpt: "Meta-analysis evaluating sensitivity of lung ultrasound vs chest radiography for pneumonia in primary care...",
-        abstract: "In a systematic review of 28 studies comprising 4,210 patients, lung ultrasound demonstrated pooled sensitivity of 92% and specificity of 93%, significantly outperforming conventional CXR (sensitivity 74%).",
+        title: "Lung ultrasound for the diagnosis of pneumonia in adults: a systematic review and meta-analysis",
+        excerpt: "Meta-analysis of the diagnostic accuracy of lung ultrasound for pneumonia in adults, against chest X-ray or CT.",
+        abstract: "Systematic review and meta-analysis of 10 studies (1,172 adults) comparing lung ultrasound with chest radiography or CT and/or clinical criteria for pneumonia. Pooled sensitivity was 94% (95% CI 92–96%) and specificity 96% (94–97%), with positive and negative likelihood ratios of 16.8 and 0.07 and an area under the ROC curve of 0.99. Each examination took at most 13 minutes; most were performed by highly skilled sonographers, and all studies were from high-income settings. The authors conclude that lung ultrasound performs well in skilled hands and encourage general practitioners and emergency physicians to learn it.",
+        journal: "Respiratory Research",
+        authors: "Chavez MA, Shams N, Ellington LE, et al.",
+        year: 2014,
+        pmid: "24758612",
+        pmcid: "PMC4005846",
+        doi: "10.1186/1465-9921-15-50"
+      },
+      {
+        id: "acad-us-2",
+        title: "The dynamic air bronchogram. A lung ultrasound sign of alveolar consolidation ruling out atelectasis",
+        excerpt: "Whether a moving air bronchogram inside an ultrasound consolidation distinguishes pneumonia from resorptive atelectasis.",
+        abstract: "Prospective ICU study of 52 ventilated patients with proven pneumonia and 16 with proven resorptive atelectasis, all showing alveolar consolidation with air bronchograms on lung ultrasound. A dynamic air bronchogram was seen in 32 of the 52 patients with pneumonia but in only 1 of the 16 with atelectasis. For distinguishing pneumonia from resorptive atelectasis, the dynamic air bronchogram had 94% specificity and a 97% positive predictive value, but 61% sensitivity and a 43% negative predictive value. Static air bronchograms were seen in most atelectases and in a third of pneumonias.",
         journal: "Chest",
-        authors: "Lichtenstein D, Jennings S, Vance M.",
-        year: 2024,
-        pmid: "38920199",
-        doi: "10.1016/j.chest.2024.04.012",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pubmed/38920199"
+        authors: "Lichtenstein D, Mezière G, Seitz J.",
+        year: 2009,
+        pmid: "19225063",
+        doi: "10.1378/chest.08-2281"
       }
     ]
   },
@@ -468,6 +504,7 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     modality: "MRI",
     patientCase: "#5014",
     finding: "Acute Ischemic Penumbra / White Matter Hyperintensity",
+    researchQuery: "DWI FLAIR mismatch acute ischemic stroke",
     badge: "BRAIN MRI (3T T2 FLAIR)",
     image: "https://i.ibb.co/pv2VfyJ7/brain-mri.jpg",
     thumbnail: "https://i.ibb.co/jvh0yRgN/brain-mri.jpg",
@@ -538,15 +575,26 @@ export const INITIAL_MEDICAL_SCANS: MedicalScanItem[] = [
     academic: [
       {
         id: "acad-mri-1",
-        title: "Diffusion-Weighted MRI vs Non-Contrast CT in Early Stroke Triage",
-        excerpt: "Prospective trial comparing emergent MRI protocols to multimodal CT in rural stroke networks...",
-        abstract: "MRI with DWI/FLAIR mismatch demonstrated 98.7% sensitivity in hyperacute cerebral ischemia compared to 42.1% on initial non-contrast head CT.",
-        journal: "Stroke",
-        authors: "Jennings S, Vance M, Thorne P, et al.",
-        year: 2025,
-        pmid: "39019284",
-        doi: "10.1161/STROKEAHA.124.045192",
-        ncbiUrl: "https://www.ncbi.nlm.nih.gov/pubmed/39019284"
+        title: "Magnetic resonance imaging and computed tomography in emergency assessment of patients with suspected acute stroke: a prospective comparison",
+        excerpt: "Prospective, blinded comparison of MRI and non-contrast CT in 356 patients assessed urgently for suspected acute stroke.",
+        abstract: "Single-centre, prospective, blinded comparison of non-contrast CT and MRI (including diffusion-weighted imaging) in 356 consecutive patients assessed for suspected acute stroke, 217 of whom had a final diagnosis of stroke. MRI detected acute ischaemic stroke in 46% of patients versus 10% with CT, and in patients scanned within 3 hours of symptom onset, 46% versus 7%. MRI was similar to CT for detecting acute intracranial haemorrhage. Against the final clinical diagnosis, sensitivity for any acute stroke was 83% for MRI and 26% for CT. The authors conclude that MRI should be the preferred test for accurate diagnosis of patients with suspected acute stroke.",
+        journal: "The Lancet",
+        authors: "Chalela JA, Kidwell CS, Nentwich LM, et al.",
+        year: 2007,
+        pmid: "17258669",
+        pmcid: "PMC1859855",
+        doi: "10.1016/S0140-6736(07)60151-2"
+      },
+      {
+        id: "acad-mri-2",
+        title: "DWI-FLAIR mismatch for the identification of patients with acute ischaemic stroke within 4·5 h of symptom onset (PRE-FLAIR): a multicentre observational study",
+        excerpt: "Whether a lesion visible on DWI but not on FLAIR identifies patients still within the 4.5-hour thrombolysis window.",
+        abstract: "Multicentre observational study of 543 patients with acute stroke who had DWI and FLAIR MRI within 12 hours of observed symptom onset. Acute ischaemic lesions were visible on DWI in 95% of patients but on FLAIR in only 50%. A DWI-FLAIR mismatch (lesion visible on DWI but not on FLAIR) identified patients within 4.5 hours of onset with 62% sensitivity, 78% specificity, 83% positive predictive value and 54% negative predictive value. A longer time to MRI, younger age and a larger DWI lesion volume independently predicted that the lesion would be visible on FLAIR. Patients with a DWI-FLAIR mismatch are likely to be within the time window in which thrombolysis is safe and effective, supporting its use to select patients for a future randomised trial of thrombolysis in stroke of unknown onset time.",
+        journal: "The Lancet Neurology",
+        authors: "Thomalla G, Cheng B, Ebinger M, et al.",
+        year: 2011,
+        pmid: "21978972",
+        doi: "10.1016/S1474-4422(11)70192-2"
       }
     ]
   }

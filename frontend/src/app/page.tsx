@@ -18,6 +18,7 @@ import {
   BookOpen,
   Image as ImageIcon,
   UploadCloud,
+  ShieldCheck,
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 import SupporterProfileModal from "@/components/SupporterProfileModal";
@@ -28,6 +29,8 @@ import LocalizedRegionalNews from "@/components/LocalizedRegionalNews";
 import AcademicResearch from "@/components/AcademicResearch";
 import RelatedScansPanel from "@/components/RelatedScansPanel";
 import UploadScanModal from "@/components/UploadScanModal";
+import RolePermissionsModal from "@/components/RolePermissionsModal";
+import { isUserSuperAdmin } from "@/lib/rbac";
 import { apiFetch } from "@/lib/api";
 
 import {
@@ -91,6 +94,7 @@ export default function Home() {
   );
   const [isScansDrawerOpen, setIsScansDrawerOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isRolePermissionsModalOpen, setIsRolePermissionsModalOpen] = useState(false);
 
   // Load community uploaded scans from server & local storage so they are always available
   useEffect(() => {
@@ -300,7 +304,7 @@ export default function Home() {
           },
         ],
         news: activeScan.news,
-        academic: activeScan.academic,
+        academic: [],
       };
 
       setCohortScans((prev) => [newScan, ...prev]);
@@ -322,13 +326,7 @@ export default function Home() {
   };
 
   const handleOpenUploadModal = () => {
-    if (!currentUser) {
-      setIsSupportPrompt(false);
-      setAuthModalMode("login");
-      setIsAuthModalOpen(true);
-    } else {
-      setIsUploadModalOpen(true);
-    }
+    setIsUploadModalOpen(true);
   };
 
   const handleSupportLmsClick = () => {
@@ -462,16 +460,27 @@ export default function Home() {
 
         {/* Right: Upload Scan Button & Google Auth / Profile */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* SuperAdmin RBAC Engine Button */}
+          <button
+            type="button"
+            onClick={() => setIsRolePermissionsModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white text-xs font-bold shadow-md shadow-purple-950/40 border border-purple-400/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+            title="SuperAdmin RBAC Engine & Role Permissions"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+            <span className="hidden sm:inline">SuperAdmin RBAC</span>
+          </button>
+
           {!currentUser ? (
             <>
               <button
                 type="button"
                 onClick={handleOpenUploadModal}
-                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#131c2a] hover:bg-[#182436] text-cyan-400 hover:text-cyan-300 text-xs font-semibold border border-cyan-800/50 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                title="Sign in to upload medical scans"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md border border-cyan-400/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+                title="Upload Medical Scan & Case"
               >
                 <UploadCloud className="w-3.5 h-3.5" />
-                <span>Upload Scan</span>
+                <span className="hidden sm:inline">Upload Scan</span>
               </button>
 
               <button
@@ -538,11 +547,15 @@ export default function Home() {
                 <span className="text-xs font-semibold text-white max-w-[120px] truncate">
                   {currentUser.fullName}
                 </span>
-                {currentUser.profession && (
+                {currentUser.role === "superadmin" || isUserSuperAdmin(currentUser.email, currentUser.role) ? (
+                  <span className="inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-purple-950 text-purple-300 border border-purple-700/60 font-semibold truncate max-w-[110px]">
+                    SuperAdmin
+                  </span>
+                ) : currentUser.profession ? (
                   <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-medium truncate max-w-[110px]">
                     {currentUser.profession}
                   </span>
-                )}
+                ) : null}
               </button>
               <button
                 type="button"
@@ -562,6 +575,14 @@ export default function Home() {
 
       {/* Mobile Universal Navigation Tabs (for viewports <768px) */}
       <div className="flex md:hidden bg-[#0d141f] border-b border-[#182332] px-2 py-1.5 text-xs gap-1 overflow-x-auto shrink-0 scrollbar-none">
+        <button
+          onClick={() => setIsRolePermissionsModalOpen(true)}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-purple-950/70 text-purple-300 hover:text-white transition-colors whitespace-nowrap font-medium border border-purple-800/60"
+          title="Role Permissions Management"
+        >
+          <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+          <span>RBAC Engine</span>
+        </button>
         <button
           onClick={handleOpenUploadModal}
           className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#131c2a] text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap font-medium"
@@ -716,8 +737,13 @@ export default function Home() {
               state={geoSettings.state}
             />
 
-            {/* 2. Academic Research Articles via Google Scholar & NCBI / PubMed */}
-            <AcademicResearch articles={activeScan.academic} activeCondition={activeScan.finding} />
+            {/* 2. Academic Research Articles via Google Scholar & NCBI / PubMed.
+                Keyed by scan so a search made on one scan is not shown under the next. */}
+            <AcademicResearch
+              key={activeScan.id}
+              articles={activeScan.academic}
+              activeCondition={activeScan.researchQuery || activeScan.title}
+            />
           </div>
         </div>
 
@@ -758,8 +784,9 @@ export default function Home() {
 
           {mobileTab === "academic" && (
             <AcademicResearch
+              key={activeScan.id}
               articles={activeScan.academic}
-              activeCondition={activeScan.finding}
+              activeCondition={activeScan.researchQuery || activeScan.title}
             />
           )}
         </div>
@@ -907,6 +934,13 @@ export default function Home() {
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         onScanUploaded={handleUploadScan}
+        currentUser={currentUser}
+      />
+
+      {/* SuperAdmin Role Permissions Management Modal */}
+      <RolePermissionsModal
+        isOpen={isRolePermissionsModalOpen}
+        onClose={() => setIsRolePermissionsModalOpen(false)}
         currentUser={currentUser}
       />
     </div>

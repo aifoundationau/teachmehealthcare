@@ -6,7 +6,7 @@ import { claimRateLimit } from "@/server/rateLimit";
 import {
   SCHOLAR_COOLDOWN_SECONDS,
   fetchFromGoogleScholar,
-  fetchFromPubmedCentral,
+  fetchFromPubmed,
   scholarSearchUrl,
   type ScholarArticle,
 } from "@/server/scholar";
@@ -67,13 +67,9 @@ export const GET = route(async (req) => {
   }
 
   try {
-    const articles = await fetchFromPubmedCentral(q, yearLow);
+    const articles = await fetchFromPubmed(q, yearLow);
     if (articles.length) {
-      return respond(
-        "pubmed_ncbi",
-        articles,
-        "Retrieved peer-reviewed medical publications via NCBI PubMed Central (Google Scholar fallback).",
-      );
+      return respond("pubmed_ncbi", articles, "Results retrieved from NCBI PubMed (Google Scholar was unavailable).");
     }
   } catch (err) {
     console.error("[scholar] NCBI PubMed API error:", err);

@@ -63,9 +63,12 @@ export default function UploadScanModal({
   const [highlightedBodyRegionIndex, setHighlightedBodyRegionIndex] = useState(0);
 
   const [description, setDescription] = useState("");
-  const [patientAge, setPatientAge] = useState<string>("48");
-  const [patientGender, setPatientGender] = useState<"Male" | "Female" | "Other">("Male");
-  const [isAnonymized, setIsAnonymized] = useState(true);
+  const [patientAge, setPatientAge] = useState<string>("");
+  const [patientGender, setPatientGender] = useState<"" | "Male" | "Female" | "Other">("");
+  const [contributorName, setContributorName] = useState<string>(
+    currentUser?.fullName || currentUser?.email?.split("@")[0] || ""
+  );
+  const [isAnonymized, setIsAnonymized] = useState(false);
 
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -78,6 +81,13 @@ export default function UploadScanModal({
   const modalityInputRef = useRef<HTMLInputElement>(null);
   const bodyRegionComboboxRef = useRef<HTMLDivElement>(null);
   const bodyRegionInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync contributor name when user logs in or updates
+  useEffect(() => {
+    if (currentUser?.fullName && !contributorName) {
+      setContributorName(currentUser.fullName);
+    }
+  }, [currentUser]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -110,6 +120,28 @@ export default function UploadScanModal({
     getBodyRegionMatches(bodyRegion, 8);
   const fullSuggestedBodyRegion =
     bodyRegionGhostSuggestion && bodyRegionMatches.length > 0 ? bodyRegionMatches[0].name : null;
+
+  // Strict completeness validation for every single required detail
+  const missingFields: string[] = [];
+  if (!file) missingFields.push("Medical Image Scan");
+  if (!title.trim() || title.trim().length < 3) missingFields.push("Case Title (min 3 chars)");
+  if (!modality.trim()) missingFields.push("Imaging Modality");
+  if (!bodyRegion.trim()) missingFields.push("Body Region");
+  if (!patientAge.trim() || isNaN(Number(patientAge)) || Number(patientAge) < 0 || Number(patientAge) > 125) {
+    missingFields.push("Patient Age (0-125)");
+  }
+  if (!patientGender) missingFields.push("Biological Sex");
+  if (!contributorName.trim() || contributorName.trim().length < 2) {
+    missingFields.push("Clinician / Contributor Name");
+  }
+  if (!description.trim() || description.trim().length < 10) {
+    missingFields.push("Clinical Description (min 10 chars)");
+  }
+  if (!isAnonymized) missingFields.push("De-identification Certification");
+
+  const totalDetails = 9;
+  const completedDetails = totalDetails - missingFields.length;
+  const isFormComplete = missingFields.length === 0;
 
   if (!isOpen) return null;
 
@@ -157,6 +189,10 @@ export default function UploadScanModal({
     setModality("Projection Radiography (Plain X-ray)");
     setBodyRegion("Thorax (Chest)");
     setDescription("");
+    setPatientAge("");
+    setPatientGender("");
+    setContributorName(currentUser?.fullName || currentUser?.email?.split("@")[0] || "");
+    setIsAnonymized(false);
     setErrorMessage(null);
     setSuccessMessage(null);
     setIsUploading(false);
@@ -278,33 +314,8 @@ export default function UploadScanModal({
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!file) {
-      setErrorMessage("Please select or drop a medical image to upload.");
-      return;
-    }
-
-    if (title.trim().length < 3) {
-      setErrorMessage("Please provide a clinical case title (at least 3 characters).");
-      return;
-    }
-
-    if (!modality.trim()) {
-      setErrorMessage("Please specify the imaging modality.");
-      return;
-    }
-
-    if (!bodyRegion.trim()) {
-      setErrorMessage("Please specify the anatomical body region.");
-      return;
-    }
-
-    if (!description.trim()) {
-      setErrorMessage("Please enter a clinical description or history of the scan.");
-      return;
-    }
-
-    if (!isAnonymized) {
-      setErrorMessage("You must confirm that this scan has been de-identified before sharing.");
+    if (!isFormComplete) {
+      setErrorMessage(`Please complete all required details before uploading (${missingFields[0]} is required).`);
       return;
     }
 
@@ -318,13 +329,19 @@ export default function UploadScanModal({
 
       // 1. Map to backend API bucket (xray, ct, mri, ultrasound, or other)
       const apiModality = mapModalityToApiBucket(modality);
+      const uploaderDisplayName =
+        contributorName.trim() ||
+        currentUser?.fullName ||
+        currentUser?.email?.split("@")[0] ||
+        "Contributing Clinician";
 
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", file!);
       formData.append("title", title.trim());
       formData.append("modality", apiModality);
       formData.append("body_region", bodyRegion.trim());
       formData.append("description", description.trim());
+      formData.append("contributor_name", uploaderDisplayName);
       formData.append("is_anonymized", "true");
 
       let apiSuccess = false;
@@ -353,15 +370,12 @@ export default function UploadScanModal({
       // 2. Direct ImgBB Client fallback if server route had network or unconfigured error
       if (!apiSuccess || !uploadedUrl) {
         setUploadStep("Connecting directly to ImgBB cloud storage...");
-        const clientUpload = await uploadImageToImgBB(file, title.trim());
+        const clientUpload = await uploadImageToImgBB(file!, title.trim());
         uploadedUrl = clientUpload.url;
         thumbnailUrl = clientUpload.thumbUrl || clientUpload.url;
       }
 
       setUploadStep("Publishing case to TeachMeHealthcare workstation...");
-
-      const uploaderDisplayName =
-        currentUser?.fullName || currentUser?.email?.split("@")[0] || "Contributing Clinician";
 
       const initialMessage: CaseroomMessage = {
         id: `msg-case-${Date.now()}-1`,
@@ -378,7 +392,7 @@ export default function UploadScanModal({
         role: "Teacher",
         avatarColor: "from-emerald-600 to-teal-600",
         time: "Just now",
-        message: `Case received and published. Clinical presentation for ${title.trim()} (${modality} · ${bodyRegion}) is open for student review and diagnostic differential.`,
+        message: `Case received from ${uploaderDisplayName} and published. Clinical presentation for ${title.trim()} (${modality} · ${bodyRegion}) is open for student review and diagnostic differential.`,
       };
 
       // Find matched catalog item for rich category and badge
@@ -401,7 +415,7 @@ export default function UploadScanModal({
         bodyRegion: bodyRegion,
         clinicalSummary: description.trim(),
         patientAge: parseInt(patientAge, 10) || 45,
-        patientGender: patientGender,
+        patientGender: (patientGender as "Male" | "Female" | "Other") || "Male",
         history: description.trim(),
         annotations: [],
         caseroom: [initialMessage, facultyReply],
@@ -452,7 +466,7 @@ export default function UploadScanModal({
                   Upload Medical Scan & Case
                 </h2>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono font-medium">
-                  ImgBB Cloud
+                  {currentUser ? "Verified Contributor" : "Open Upload · No Login Required"}
                 </span>
               </div>
               <p className="text-[11px] text-gray-400 hidden sm:block">
@@ -842,62 +856,113 @@ export default function UploadScanModal({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g., Right Lobar Pneumonia with Pleural Effusion"
-                  className="w-full bg-[#121a28] border border-[#22334d] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                  className={`w-full bg-[#121a28] border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors ${
+                    title.trim().length >= 3 ? "border-emerald-600/50" : "border-[#22334d]"
+                  }`}
                 />
               </div>
 
-              {/* Patient Demographics Row */}
-              <div className="grid grid-cols-2 gap-2.5">
+              {/* Patient Demographics & Contributor Row (3 Columns) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label htmlFor="patient-age" className="block text-[11px] font-semibold text-gray-200 mb-1">
-                    Patient Age (approx.)
+                    Patient Age <span className="text-cyan-400">*</span>
                   </label>
                   <input
                     id="patient-age"
                     type="number"
                     min="0"
                     max="125"
+                    required
                     value={patientAge}
                     onChange={(e) => setPatientAge(e.target.value)}
-                    className="w-full bg-[#121a28] border border-[#22334d] rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500"
+                    placeholder="e.g., 48"
+                    className={`w-full bg-[#121a28] border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors ${
+                      patientAge.trim() && !isNaN(Number(patientAge)) && Number(patientAge) >= 0 && Number(patientAge) <= 125
+                        ? "border-emerald-600/50"
+                        : "border-[#22334d]"
+                    }`}
                   />
                 </div>
 
                 <div>
                   <label htmlFor="patient-gender" className="block text-[11px] font-semibold text-gray-200 mb-1">
-                    Biological Sex
+                    Biological Sex <span className="text-cyan-400">*</span>
                   </label>
                   <select
                     id="patient-gender"
+                    required
                     value={patientGender}
                     onChange={(e) => setPatientGender(e.target.value as any)}
-                    className="w-full bg-[#121a28] border border-[#22334d] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+                    className={`w-full bg-[#121a28] border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-cyan-500 transition-colors ${
+                      patientGender ? "border-emerald-600/50 text-white" : "border-[#22334d] text-gray-400"
+                    }`}
                   >
-                    <option value="Male" className="bg-[#121a28]">Male</option>
-                    <option value="Female" className="bg-[#121a28]">Female</option>
-                    <option value="Other" className="bg-[#121a28]">Other / Unspecified</option>
+                    <option value="" disabled className="bg-[#121a28] text-gray-500">
+                      Select sex...
+                    </option>
+                    <option value="Male" className="bg-[#121a28] text-white">Male</option>
+                    <option value="Female" className="bg-[#121a28] text-white">Female</option>
+                    <option value="Other" className="bg-[#121a28] text-white">Other / Intersex</option>
                   </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label htmlFor="contributor-name" className="block text-[11px] font-semibold text-gray-200">
+                      Clinician Name <span className="text-cyan-400">*</span>
+                    </label>
+                    {currentUser && (
+                      <span className="text-[9px] text-cyan-400/80 font-mono">Logged in</span>
+                    )}
+                  </div>
+                  <input
+                    id="contributor-name"
+                    type="text"
+                    required
+                    value={contributorName}
+                    onChange={(e) => setContributorName(e.target.value)}
+                    placeholder="e.g., Dr. Jane Smith"
+                    className={`w-full bg-[#121a28] border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 transition-colors ${
+                      contributorName.trim().length >= 2 ? "border-emerald-600/50" : "border-[#22334d]"
+                    }`}
+                  />
                 </div>
               </div>
 
-              {/* Clinical Description & History */}
+              {/* Clinical Description & Findings */}
               <div>
-                <label htmlFor="clinical-description" className="block text-[11px] font-semibold text-gray-200 mb-1">
-                  Clinical Description & Diagnostic Findings <span className="text-cyan-400">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label htmlFor="clinical-description" className="block text-[11px] font-semibold text-gray-200">
+                    Clinical Description & Findings <span className="text-cyan-400">*</span>
+                  </label>
+                  <span
+                    className={`text-[10px] font-mono ${
+                      description.trim().length >= 10
+                        ? "text-emerald-400 font-semibold"
+                        : "text-gray-400"
+                    }`}
+                  >
+                    {description.trim().length >= 10 ? "✓ " : ""}{description.trim().length}/10 chars min
+                  </span>
+                </div>
                 <textarea
                   id="clinical-description"
                   required
                   rows={3}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Detail the clinical history, presentation (e.g. fever, acute cough, dyspnea), radiological findings (e.g. dense opacity in right lower lobe), and discussion points for collaborative review..."
-                  className="w-full bg-[#121a28] border border-[#22334d] rounded-lg p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 resize-none leading-relaxed"
+                  placeholder="Detail the clinical history, presentation (e.g. fever, acute cough, dyspnea), radiological findings (e.g. dense opacity in right lower lobe), and differential diagnosis points..."
+                  className={`w-full bg-[#121a28] border rounded-lg p-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 resize-none leading-relaxed transition-colors ${
+                    description.trim().length >= 10 ? "border-emerald-600/50" : "border-[#22334d]"
+                  }`}
                 />
               </div>
 
               {/* De-identification Confirmation Checkbox */}
-              <div className="pt-0.5">
+              <div className={`p-2 rounded-lg border transition-colors ${
+                isAnonymized ? "bg-emerald-950/20 border-emerald-700/40" : "bg-[#101724] border-[#22334d]"
+              }`}>
                 <label className="flex items-start gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -905,8 +970,8 @@ export default function UploadScanModal({
                     onChange={(e) => setIsAnonymized(e.target.checked)}
                     className="mt-0.5 rounded border-gray-600 text-cyan-500 focus:ring-cyan-400 bg-[#121a28]"
                   />
-                  <span className="text-[10px] text-gray-300 leading-tight">
-                    I certify this scan is <strong>completely de-identified</strong> with patient names, MRNs, and hospital markers removed in accordance with Australian Privacy Principles & HIPAA Safe Harbor standards.
+                  <span className="text-[10.5px] text-gray-300 leading-tight">
+                    I certify this scan is <strong>completely de-identified</strong> with patient names, MRNs, and facility markers removed in accordance with Australian Privacy Principles & HIPAA Safe Harbor standards. <span className="text-cyan-400">*</span>
                   </span>
                 </label>
               </div>
@@ -942,23 +1007,45 @@ export default function UploadScanModal({
           )}
 
           {/* Modal Actions Footer - Compact & Crisp */}
-          <div className="px-4 sm:px-5 py-2.5 bg-[#121a28] border-t border-[#1c293c] rounded-b-2xl flex items-center justify-between shrink-0">
-            <span className="text-[10px] text-gray-400 hidden sm:inline-block">
-              Permanent cloud hosting on ImgBB · 170 modalities & 287 anatomical regions
-            </span>
-            <div className="flex items-center gap-2 ml-auto">
+          <div className="px-4 sm:px-5 py-2.5 bg-[#121a28] border-t border-[#1c293c] rounded-b-2xl flex items-center justify-between shrink-0 gap-3">
+            {/* Real-time Completion Progress */}
+            <div className="min-w-0 flex-1">
+              {isFormComplete ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-semibold animate-in fade-in duration-150">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="truncate">All details completed ({totalDetails}/{totalDetails}) · Ready to publish</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-[11px] text-amber-300/90 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">
+                    <strong>{completedDetails}/{totalDetails}</strong> details completed ·{" "}
+                    <span className="text-gray-400">
+                      Need: {missingFields.slice(0, 2).join(", ")}{missingFields.length > 2 ? ` (+${missingFields.length - 2} more)` : ""}
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isUploading}
-                className="px-3.5 py-1.5 rounded-lg bg-[#141e2e] hover:bg-[#1a273b] text-gray-300 hover:text-white transition-colors border border-[#23354f] text-xs"
+                className="px-3.5 py-1.5 rounded-lg bg-[#141e2e] hover:bg-[#1a273b] text-gray-300 hover:text-white transition-colors border border-[#23354f] text-xs cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={isUploading || !file || !title.trim() || !description.trim() || !isAnonymized}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-md shadow-cyan-950/40 border border-cyan-400/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                disabled={!isFormComplete || isUploading}
+                title={
+                  isFormComplete
+                    ? "Upload and publish scan case"
+                    : `Please fill out all details: ${missingFields.join(", ")}`
+                }
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs shadow-md shadow-cyan-950/40 border border-cyan-400/40 transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 disabled:shadow-none cursor-pointer"
               >
                 {isUploading ? (
                   <>

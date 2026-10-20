@@ -69,6 +69,7 @@ const uploadFields = z.object({
   modality: lowercaseEnum(MODALITIES),
   body_region: requiredText(2, 255),
   description: optionalText(5000),
+  contributor_name: optionalText(255),
   is_anonymized: z
     .string()
     .optional()
@@ -77,11 +78,38 @@ const uploadFields = z.object({
 
 /**
  * Uploads a scan (multipart form: file, title, modality, body_region, description,
- * is_anonymized). Available to authenticated users after login. Image metadata is removed before the
- * file is sent to ImgBB.
+ * is_anonymized). Available to all users (both authenticated and unauthenticated guests).
+ * Image metadata is removed before the file is sent to ImgBB.
  */
 export const POST = route(async (req) => {
-  const user = await requireUser(req);
+  let user = await optionalUser(req);
+  if (!user) {
+    const db = await getDb();
+    const guestEmail = "guest.clinician@teachmehealthcare.org";
+    const existingGuests = await db.select().from(users).where(eq(users.email, guestEmail)).limit(1);
+    if (existingGuests.length > 0) {
+      user = existingGuests[0];
+    } else {
+      const [newGuest] = await db
+        .insert(users)
+        .values({
+          email: guestEmail,
+          firebaseUid: "guest-clinician-public-uid",
+          fullName: "Contributing Clinician",
+          role: "supporter",
+          appTag: APP_TAG,
+          isVerified: true,
+        })
+        .onConflictDoNothing()
+        .returning();
+      if (newGuest) {
+        user = newGuest;
+      } else {
+        const [raced] = await db.select().from(users).where(eq(users.email, guestEmail)).limit(1);
+        user = raced;
+      }
+    }
+  }
 
   let form: FormData;
   try {
@@ -100,11 +128,17 @@ export const POST = route(async (req) => {
     modality: form.get("modality") ?? undefined,
     body_region: form.get("body_region") ?? undefined,
     description: form.get("description") ?? undefined,
+    contributor_name: form.get("contributor_name") ?? undefined,
     is_anonymized: form.get("is_anonymized") ?? undefined,
   });
 
   const cleaned = await stripImageMetadata(Buffer.from(await file.arrayBuffer()), file.name);
   const hosted = await uploadToImgbb(cleaned.data, file.name.replace(/\.[^.]+$/, "") || "scan");
+
+  const effectiveUser = {
+    ...user,
+    fullName: fields.contributor_name || user.fullName,
+  };
 
   const db = await getDb();
   const [image] = await db
@@ -122,5 +156,5 @@ export const POST = route(async (req) => {
     })
     .returning();
 
-  return json(imageResponse(image, user, { annotations: 0, comments: 0 }), 201);
+  return json(imageResponse(image, effectiveUser, { annotations: 0, comments: 0 }), 201);
 });

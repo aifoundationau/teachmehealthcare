@@ -1,5 +1,5 @@
 /**
- * Academic search: Google Scholar first, then NCBI PubMed Central when Scholar
+ * Academic search: Google Scholar first, then NCBI PubMed when Scholar
  * blocks the request (it usually does from cloud servers).
  */
 
@@ -14,6 +14,8 @@ export interface ScholarArticle {
   journal: string | null;
   year: number | null;
   snippet: string;
+  /** Full abstract, when the source provides one (PubMed does; Scholar only gives a snippet). */
+  abstract: string | null;
   url: string;
   pdf_url: string | null;
   citations: number | null;
@@ -29,6 +31,7 @@ const BROWSER_HEADERS = {
 const NCBI_HEADERS = {
   "User-Agent": "TeachMeHealthLMS/1.0 (academic research portal; mailto:info@teachmehealthcare.org)",
 };
+const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils";
 const TIMEOUT_MS = 7_000;
 
 export function scholarSearchUrl(query: string, yearLow?: number): string {
@@ -80,9 +83,14 @@ export async function fetchFromGoogleScholar(query: string, yearLow?: number): P
   if (blocks.length <= 1) throw new Error("No search result blocks found in Google Scholar HTML");
 
   return blocks.slice(1, 11).map((block, idx) => {
-    const linked = block.match(/<h3 class="gs_rt"[^>]*>[\s\S]*?<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
-    const unlinked = linked ? null : block.match(/<h3 class="gs_rt"[^>]*>([\s\S]*?)<\/h3>/);
-    const title = stripTags(linked ? linked[2] : (unlinked?.[1] ?? "Medical Article"));
+    // Look for the title link inside the heading only: for results without one ([CITATION] entries)
+    // a wider match picks up the next link in the block, such as "Save" or an author profile.
+    const heading = block.match(/<h3 class="gs_rt"[^>]*>([\s\S]*?)<\/h3>/)?.[1] ?? "";
+    const linked = heading.match(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/);
+    // Drop the type markers that precede an unlinked title, e.g. [CITATION].
+    const title =
+      stripTags(linked ? linked[2] : heading.replace(/<span class="gs_ct[12]">[\s\S]*?<\/span>/g, "")) ||
+      "Medical Article";
 
     const authorMatch = block.match(/<div class="gs_a">([\s\S]*?)<\/div>/);
     const authors = authorMatch ? stripTags(authorMatch[1]) : "";
@@ -99,7 +107,9 @@ export async function fetchFromGoogleScholar(query: string, yearLow?: number): P
       year: yearMatch ? Number(yearMatch[1]) : null,
       snippet:
         (snippetMatch && stripTags(snippetMatch[1])) || "Diagnostic academic abstract available on publisher repository.",
-      url: linked ? decodeHtml(linked[1]) : url,
+      abstract: null,
+      // Without a link of its own, send the reader to this exact title on Scholar.
+      url: linked ? new URL(decodeHtml(linked[1]), "https://scholar.google.com").href : scholarSearchUrl(`"${title}"`),
       pdf_url: pdfMatch ? decodeHtml(pdfMatch[1]) : null,
       citations: citedMatch ? Number(citedMatch[1]) : null,
       source: "google_scholar",
@@ -107,17 +117,60 @@ export async function fetchFromGoogleScholar(query: string, yearLow?: number): P
   });
 }
 
-interface NcbiSummary {
-  title?: string;
-  source?: string;
-  pubdate?: string;
-  authors?: { name?: string }[];
+/** Text of the first `<tag>` element in a piece of PubMed XML, or "" when there is none. */
+function xmlText(xml: string, tag: string): string {
+  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`));
+  return match ? stripTags(match[1]).replace(/\s+/g, " ") : "";
 }
 
-export async function fetchFromPubmedCentral(query: string, yearLow?: number): Promise<ScholarArticle[]> {
-  const term = yearLow ? `${query} AND ${yearLow}:3000[pdat]` : query;
-  const searchParams = new URLSearchParams({ db: "pmc", term, retmode: "json", retmax: "8" });
-  const searchRes = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?${searchParams}`, {
+/** One <PubmedArticle> (or <PubmedBookArticle>) record from E-Fetch. */
+function parsePubmedRecord(record: string): ScholarArticle | null {
+  const pmid = xmlText(record, "PMID");
+  if (!pmid) return null;
+
+  const title = (xmlText(record, "ArticleTitle") || xmlText(record, "BookTitle")).replace(/\.$/, "");
+  // Books list their editors first; skip them.
+  const authorList = record.match(/<AuthorList(?![^>]*Type="editors")[^>]*>([\s\S]*?)<\/AuthorList>/)?.[1] ?? "";
+  const names = Array.from(authorList.matchAll(/<Author\b[^>]*>([\s\S]*?)<\/Author>/g), ([, author]) => {
+    const lastName = xmlText(author, "LastName");
+    return lastName ? `${lastName} ${xmlText(author, "Initials")}`.trim() : xmlText(author, "CollectiveName");
+  }).filter(Boolean);
+  const abstractXml = record.match(/<Abstract>([\s\S]*?)<\/Abstract>/)?.[1] ?? "";
+  const abstract = Array.from(abstractXml.matchAll(/<AbstractText([^>]*)>([\s\S]*?)<\/AbstractText>/g), ([, attrs, text]) => {
+    const label = attrs.match(/Label="([^"]+)"/)?.[1];
+    const body = stripTags(text).replace(/\s+/g, " ");
+    return label ? `${label}: ${body}` : body;
+  }).join("\n\n");
+  const flatAbstract = abstract.replace(/\s+/g, " ");
+  // Each cited reference has an <ArticleIdList> too; the record's own list comes first.
+  const articleIds = record.match(/<ArticleIdList>([\s\S]*?)<\/ArticleIdList>/)?.[1] ?? "";
+  const pmcid = articleIds.match(/<ArticleId IdType="pmc">(PMC\d+)<\/ArticleId>/)?.[1];
+  const year = xmlText(record, "PubDate").match(/\d{4}/)?.[0];
+
+  return {
+    id: `pubmed-${pmid}`,
+    title,
+    authors: (names.slice(0, 3).join(", ") + (names.length > 3 ? " et al." : "")) || "No authors listed",
+    journal: xmlText(record, "ISOAbbreviation") || xmlText(record, "Title") || xmlText(record, "BookTitle") || null,
+    year: year ? Number(year) : null,
+    snippet:
+      flatAbstract.length > 300
+        ? `${flatAbstract.slice(0, 300).replace(/\s+\S*$/, "")}…`
+        : flatAbstract || "No abstract available on PubMed.",
+    abstract: abstract || null,
+    url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+    // Only articles with free full text in PubMed Central have a PDF to offer.
+    pdf_url: pmcid ? `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/pdf/main.pdf` : null,
+    citations: null,
+    source: "pubmed_ncbi",
+  };
+}
+
+export async function fetchFromPubmed(query: string, yearLow?: number): Promise<ScholarArticle[]> {
+  const term = yearLow ? `(${query}) AND ${yearLow}:3000[pdat]` : query;
+  // "Best Match" order: by default E-Search lists the most recently added matches first, however loosely they match.
+  const searchParams = new URLSearchParams({ db: "pubmed", term, sort: "relevance", retmode: "json", retmax: "8" });
+  const searchRes = await fetch(`${EUTILS}/esearch.fcgi?${searchParams}`, {
     headers: NCBI_HEADERS,
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -125,37 +178,17 @@ export async function fetchFromPubmedCentral(query: string, yearLow?: number): P
   const ids: string[] = (await searchRes.json())?.esearchresult?.idlist ?? [];
   if (!ids.length) return [];
 
-  const summaryParams = new URLSearchParams({ db: "pmc", id: ids.slice(0, 8).join(","), retmode: "json" });
-  const summaryRes = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?${summaryParams}`, {
+  const fetchParams = new URLSearchParams({ db: "pubmed", id: ids.join(","), retmode: "xml" });
+  const fetchRes = await fetch(`${EUTILS}/efetch.fcgi?${fetchParams}`, {
     headers: NCBI_HEADERS,
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!summaryRes.ok) throw new Error(`NCBI E-Summary failed: ${summaryRes.status}`);
-  const summaries: Record<string, NcbiSummary> = (await summaryRes.json())?.result ?? {};
-
-  const articles: ScholarArticle[] = [];
-  for (const pmcId of ids) {
-    const item = summaries[pmcId];
-    if (!item) continue;
-
-    const journal = item.source || "PubMed Central";
-    const pubdate = item.pubdate ?? "";
-    const yearMatch = pubdate.match(/\b(20\d\d)\b/);
-    const names = (item.authors ?? []).map((a) => a.name).filter((n): n is string => !!n);
-    const pmcid = `PMC${pmcId}`;
-
-    articles.push({
-      id: `pmc-${pmcId}`,
-      title: (item.title ?? "").trim().replace(/\.$/, ""),
-      authors: (names.slice(0, 3).join(", ") + (names.length > 3 ? " et al." : "")) || "Medical Research Team",
-      journal,
-      year: yearMatch ? Number(yearMatch[1]) : (yearLow ?? null),
-      snippet: `Peer-reviewed medical paper published in ${journal} (${pubdate}). Full text indexed on NCBI PubMed Central.`,
-      url: `https://www.ncbi.nlm.nih.gov/pmc/articles/${pmcid}/`,
-      pdf_url: `https://pmc.ncbi.nlm.nih.gov/articles/${pmcid}/pdf/main.pdf`,
-      citations: null,
-      source: "pubmed_ncbi",
-    });
+  if (!fetchRes.ok) throw new Error(`NCBI E-Fetch failed: ${fetchRes.status}`);
+  const articles = new Map<string, ScholarArticle>();
+  for (const record of (await fetchRes.text()).split(/<PubmedArticle>|<PubmedBookArticle>/).slice(1)) {
+    const article = parsePubmedRecord(record);
+    if (article) articles.set(article.id, article);
   }
-  return articles;
+  // Keep E-Search's relevance order.
+  return ids.flatMap((id) => articles.get(`pubmed-${id}`) ?? []);
 }

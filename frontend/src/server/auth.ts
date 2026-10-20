@@ -135,11 +135,15 @@ export async function optionalUser(req: NextRequest): Promise<User | null> {
 export const DOCTOR_ROLES: readonly Role[] = ["doctor", "admin"];
 
 export function requireRole(user: User, roles: readonly Role[]) {
+  // SuperAdmins get access to every administrative function
+  if (user.role === "superadmin" || user.role === "admin") {
+    return;
+  }
   if (!roles.includes(user.role as Role)) {
     throw new ApiError(403, `Access denied. Required role(s): ${roles.join(", ")}`);
   }
 }
 
 export function canModify(user: User, ownerId: number) {
-  return user.id === ownerId || user.role === "admin";
+  return user.id === ownerId || user.role === "admin" || user.role === "superadmin";
 }

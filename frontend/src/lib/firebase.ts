@@ -10,6 +10,7 @@ import {
   onAuthStateChanged as fbOnAuthStateChanged,
   User as FirebaseUser,
 } from "firebase/auth";
+import { getFirestore, Firestore } from "firebase/firestore";
 
 import { apiFetch } from "@/lib/api";
 import { removeStorage, writeStorage } from "@/lib/storage";
@@ -32,11 +33,13 @@ export const GOOGLE_CLIENT_ID =
 // Safe SSR Firebase App initialization
 let app: FirebaseApp | undefined;
 let auth: any;
+let firestoreDb: Firestore | undefined;
 let googleProvider: any;
 
 try {
   app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   auth = getAuth(app);
+  firestoreDb = getFirestore(app);
   googleProvider = new GoogleAuthProvider();
   googleProvider.setCustomParameters({
     prompt: "select_account",
@@ -45,7 +48,7 @@ try {
   console.warn("Firebase client initialization note:", e);
 }
 
-export { auth, googleProvider };
+export { app, auth, googleProvider, firestoreDb };
 
 export interface SupporterRegistrationData {
   email: string;

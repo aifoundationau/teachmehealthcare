@@ -25,6 +25,7 @@ export interface ScholarArticleResult {
   journal?: string;
   year?: number;
   snippet: string;
+  abstract?: string | null;
   url: string;
   pdf_url?: string;
   citations?: number;
@@ -180,7 +181,7 @@ export default function AcademicResearch({
             </h2>
           </div>
           <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-2">
-            <span>Google Scholar &bull; NCBI PubMed Central</span>
+            <span>Google Scholar &bull; NCBI PubMed</span>
             <span className="text-emerald-400 font-medium">1 Search/Min Limit</span>
           </div>
         </div>
@@ -311,7 +312,7 @@ export default function AcademicResearch({
                           : "bg-emerald-950/80 text-emerald-300 border border-emerald-800/60"
                       }`}
                     >
-                      {item.source === "google_scholar" ? "Google Scholar" : "NCBI PMC"}
+                      {item.source === "google_scholar" ? "Google Scholar" : "PubMed"}
                     </span>
                   </div>
                   <p className="text-gray-400 text-[10px] mt-1 leading-relaxed line-clamp-2">
@@ -321,7 +322,8 @@ export default function AcademicResearch({
 
                 <div className="flex items-center justify-between pt-1.5 border-t border-[#1b2636]/60 text-[10px]">
                   <div className="flex items-center gap-2 text-gray-400 font-mono text-[9px] overflow-hidden truncate">
-                    <span>{item.authors ? item.authors.split("-")[0].trim() : "Scholarly Article"}</span>
+                    {/* Scholar's line reads "Authors - Journal, Year - Publisher"; hyphenated surnames stay whole. */}
+                    <span>{item.authors ? item.authors.split(/\s-\s/)[0].trim() : "Scholarly Article"}</span>
                     {item.year && <span className="text-gray-500">&bull; {item.year}</span>}
                     {item.citations !== undefined && item.citations !== null && (
                       <span className="text-amber-400 font-semibold">&bull; Cited by {item.citations}</span>
@@ -347,9 +349,9 @@ export default function AcademicResearch({
                         setActiveArticle({
                           title: item.title,
                           authors: item.authors,
-                          journal: item.journal || "Google Scholar Indexed Repository",
-                          year: item.year || "2000+",
-                          abstract: item.snippet,
+                          journal: item.journal || undefined,
+                          year: item.year || undefined,
+                          abstract: item.abstract || item.snippet,
                           url: item.url,
                           pdf_url: item.pdf_url,
                           source: item.source,
@@ -387,7 +389,7 @@ export default function AcademicResearch({
               </a>
             </div>
           )
-        ) : (
+        ) : articles.length > 0 ? (
           /* State 2: Default Curated Articles for the active case scan */
           articles.map((item) => (
             <div
@@ -414,7 +416,7 @@ export default function AcademicResearch({
                       journal: item.journal,
                       year: item.year,
                       abstract: item.abstract,
-                      url: item.ncbiUrl,
+                      url: `https://pubmed.ncbi.nlm.nih.gov/${item.pmid}/`,
                       pmid: item.pmid,
                       doi: item.doi,
                       source: "ncbi_pubmed",
@@ -427,6 +429,21 @@ export default function AcademicResearch({
               </div>
             </div>
           ))
+        ) : (
+          /* State 3: No curated articles for this scan (community uploads, index cases) */
+          <div className="py-8 text-center text-gray-400 space-y-2">
+            <BookOpen className="w-8 h-8 text-gray-500 mx-auto" />
+            <p className="text-xs">No curated articles for this scan yet.</p>
+            <button
+              type="button"
+              onClick={() => handleScholarSearch(undefined, currentQueryTerm)}
+              disabled={isSearching}
+              className="inline-flex items-center gap-1 max-w-full px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-medium text-xs hover:bg-cyan-500 transition-colors disabled:opacity-60"
+            >
+              <Search className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Find articles on &ldquo;{currentQueryTerm}&rdquo;</span>
+            </button>
+          </div>
         )}
       </div>
 
@@ -454,9 +471,11 @@ export default function AcademicResearch({
             {/* Modal Content */}
             <div className="p-5 overflow-y-auto space-y-3.5 text-xs leading-relaxed">
               <div>
-                <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40">
-                  {activeArticle.journal} ({activeArticle.year})
-                </span>
+                {(activeArticle.journal || activeArticle.year) && (
+                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40">
+                    {[activeArticle.journal, activeArticle.year && `(${activeArticle.year})`].filter(Boolean).join(" ")}
+                  </span>
+                )}
                 <h2 className="text-sm font-bold text-white mt-1.5 leading-snug">
                   {activeArticle.title}
                 </h2>
@@ -483,7 +502,9 @@ export default function AcademicResearch({
                   <div>DOI: <span className="text-white">{activeArticle.doi}</span></div>
                 )}
                 <div>Source: <span className="text-cyan-400 uppercase">{activeArticle.source}</span></div>
-                <div>Year: <span className="text-emerald-400">&ge; 2000</span></div>
+                {activeArticle.year && (
+                  <div>Year: <span className="text-emerald-400">{activeArticle.year}</span></div>
+                )}
               </div>
             </div>
 
