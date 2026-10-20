@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { optionalUser } from "@/server/auth";
+import { requireRole, requireUser } from "@/server/auth";
 import { getDb } from "@/server/db";
 import { users } from "@/server/db/schema";
 import { APP_TAG, env } from "@/server/env";
 import { ApiError, json, route } from "@/server/http";
+import { requiredText } from "@/server/validation";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,10 @@ const DEFAULT_SUPERADMINS = [
   },
 ];
 
+/** Lists SuperAdmins. Accessible to SuperAdmins and Admins only. */
 export const GET = route(async (req) => {
+  const user = await requireUser(req);
+  requireRole(user, ["admin"]);
   const db = await getDb();
   // Query users with superadmin role from database
   const dbSuperAdmins = await db
@@ -71,13 +75,18 @@ export const GET = route(async (req) => {
 });
 
 const addSuperAdminSchema = z.object({
-  email: z.string().email(),
-  fullName: z.string().min(2),
-  notes: z.string().optional(),
+  email: z.string().email().max(255),
+  fullName: requiredText(2, 255),
+  notes: z.string().max(1000).optional(),
 });
 
+/** Grants SuperAdmin to an email address. Only an existing SuperAdmin can do this. */
 export const POST = route(async (req) => {
-  let body: any;
+  const user = await requireUser(req);
+  if (user.role !== "superadmin") {
+    throw new ApiError(403, "Only a SuperAdmin can designate another SuperAdmin.");
+  }
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
@@ -127,7 +136,7 @@ export const POST = route(async (req) => {
         isSuperAdmin: true,
         notes: notes || "Designated SuperAdmin",
       },
-      message: `SuperAdmin credentials stored in Firebase for ${cleanEmail}.`,
+      message: `SuperAdmin role granted to ${cleanEmail}.`,
     },
     201
   );

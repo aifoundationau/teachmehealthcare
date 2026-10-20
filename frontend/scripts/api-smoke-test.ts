@@ -60,6 +60,8 @@ async function main() {
     comments: asRoute(await import("../src/app/api/images/[imageId]/comments/route")),
     ask: asRoute(await import("../src/app/api/ai/ask/route")),
     search: asRoute(await import("../src/app/api/search/route")),
+    adminRoles: asRoute(await import("../src/app/api/admin/roles/route")),
+    superadmins: asRoute(await import("../src/app/api/admin/superadmins/route")),
   };
 
   async function call(
@@ -338,6 +340,60 @@ async function main() {
     assert.equal((await call(routes.image, "GET", "/x", { token: bob, params: imageParams })).status, 404);
     const params = { annotationId: String(annotationId) };
     assert.equal((await call(routes.annotation, "DELETE", "/x", { token: bob, params })).status, 404);
+  });
+
+  console.log("Admin");
+  const carol = await signToken("uid-carol", "carol@example.com");
+  const dave = await signToken("uid-dave", "dave@example.com");
+  await call(routes.me, "GET", "/api/auth/me", { token: carol });
+  await call(routes.me, "GET", "/api/auth/me", { token: dave });
+  await db.update(users).set({ role: "admin" }).where(eq(users.email, "carol@example.com"));
+  await db.update(users).set({ role: "superadmin" }).where(eq(users.email, "dave@example.com"));
+  const roleOf = async (email: string) => (await db.select().from(users).where(eq(users.email, email)))[0]?.role;
+
+  await check("role assignments need a token and an admin", async () => {
+    assert.equal((await call(routes.adminRoles, "GET", "/x")).status, 401);
+    assert.equal((await call(routes.adminRoles, "GET", "/x", { token: aliceNow })).status, 403);
+    assert.equal((await call(routes.superadmins, "GET", "/x")).status, 401);
+    assert.equal((await call(routes.superadmins, "GET", "/x", { token: aliceNow })).status, 403);
+    const res = await call(routes.adminRoles, "GET", "/x", { token: carol });
+    assert.equal(res.status, 200);
+    assert.ok(res.body.roleAssignments.supporter.includes("alice@example.com"));
+  });
+  await check("nobody can make themselves a SuperAdmin", async () => {
+    const promote = { email: "alice@example.com", fullName: "Alice" };
+    assert.equal((await call(routes.superadmins, "POST", "/x", { body: promote })).status, 401);
+    assert.equal((await call(routes.superadmins, "POST", "/x", { token: aliceNow, body: promote })).status, 403);
+    assert.equal((await call(routes.superadmins, "POST", "/x", { token: carol, body: promote })).status, 403);
+    const selfAssign = { roleId: "superadmin", permissions: [], assignedEmails: ["alice@example.com"] };
+    assert.equal((await call(routes.adminRoles, "POST", "/x", { body: selfAssign })).status, 401);
+    assert.equal((await call(routes.adminRoles, "POST", "/x", { token: aliceNow, body: selfAssign })).status, 403);
+    assert.equal(await roleOf("alice@example.com"), "supporter");
+  });
+  await check("admins assign ordinary roles but not administrator ones", async () => {
+    const teacher = await call(routes.adminRoles, "POST", "/x", {
+      token: carol,
+      body: { roleId: "Teacher", permissions: [], assignedEmails: ["alice@example.com", "dave@example.com"] },
+    });
+    assert.equal(teacher.status, 200);
+    assert.equal(teacher.body.assignedCount, 1);
+    assert.equal(await roleOf("alice@example.com"), "teacher");
+    assert.equal(await roleOf("dave@example.com"), "superadmin");
+    const admin = await call(routes.adminRoles, "POST", "/x", {
+      token: carol,
+      body: { roleId: "admin", permissions: [], assignedEmails: ["alice@example.com"] },
+    });
+    assert.equal(admin.status, 403);
+    const unknown = await call(routes.adminRoles, "POST", "/x", {
+      token: carol,
+      body: { roleId: "owner", permissions: [], assignedEmails: ["alice@example.com"] },
+    });
+    assert.equal(unknown.status, 422);
+  });
+  await check("a SuperAdmin can designate another SuperAdmin", async () => {
+    const res = await call(routes.superadmins, "POST", "/x", { token: dave, body: { email: "carol@example.com", fullName: "Carol" } });
+    assert.equal(res.status, 201);
+    assert.equal(await roleOf("carol@example.com"), "superadmin");
   });
 
   console.log(`\nAll ${passed} checks passed.`);

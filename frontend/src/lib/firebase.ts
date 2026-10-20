@@ -37,9 +37,10 @@ let firestoreDb: Firestore | undefined;
 let googleProvider: any;
 
 try {
-  app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-  auth = getAuth(app);
-  firestoreDb = getFirestore(app);
+  const firebaseApp = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  app = firebaseApp;
+  auth = getAuth(firebaseApp);
+  firestoreDb = getFirestore(firebaseApp);
   googleProvider = new GoogleAuthProvider();
   googleProvider.setCustomParameters({
     prompt: "select_account",

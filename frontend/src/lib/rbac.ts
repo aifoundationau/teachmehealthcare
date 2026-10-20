@@ -8,9 +8,6 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  updateDoc,
-  deleteDoc,
-  Timestamp,
 } from "firebase/firestore";
 import { firestoreDb, firebaseConfig } from "./firebase";
 import { readStorage, writeStorage } from "./storage";
@@ -683,8 +680,8 @@ export async function loadRoleDefinitions(): Promise<RoleDefinition[]> {
           if (docData) {
             return {
               ...role,
-              permissions: docData.permissions || role.permissions,
-              assignedEmails: docData.assignedEmails || role.assignedEmails,
+              permissions: Array.isArray(docData.permissions) ? docData.permissions : role.permissions,
+              assignedEmails: Array.isArray(docData.assignedEmails) ? docData.assignedEmails : role.assignedEmails,
               updatedAt: docData.updatedAt || role.updatedAt,
               isCustomized: true,
             };

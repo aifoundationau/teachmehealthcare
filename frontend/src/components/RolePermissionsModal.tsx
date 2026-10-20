@@ -41,7 +41,7 @@ import {
   registerSuperAdmin,
   isUserSuperAdmin,
 } from "@/lib/rbac";
-import { UserProfile } from "@/lib/firebase";
+import { UserProfile, firebaseConfig } from "@/lib/firebase";
 
 interface RolePermissionsModalProps {
   isOpen: boolean;

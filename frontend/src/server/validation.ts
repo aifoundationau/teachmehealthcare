@@ -17,6 +17,21 @@ export const FINDING_TYPES = [
 export const SEVERITIES = ["mild", "moderate", "severe"] as const;
 export const ROLES = ["supporter", "student", "doctor", "admin"] as const;
 export type Role = (typeof ROLES)[number];
+/** Roles an administrator can assign: the API roles plus the RBAC console's roles (BASELINE_ROLES in lib/rbac.ts). */
+export const ASSIGNABLE_ROLES = [
+  ...ROLES,
+  "superadmin",
+  "chancellor",
+  "president",
+  "ceo",
+  "coo",
+  "cfo",
+  "accounting",
+  "administration",
+  "teacher",
+] as const;
+/** Roles only a SuperAdmin may grant, so an admin cannot promote anyone to their own level or above. */
+export const PRIVILEGED_ROLES: readonly string[] = ["admin", "superadmin"];
 
 /** Removes HTML tags and control characters, then trims. React escapes output too; this keeps stored text clean. */
 export function cleanText(value: string): string {
