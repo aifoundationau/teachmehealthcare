@@ -5,7 +5,7 @@ export const APP_TAG = "healthlms";
 export const env = {
   /** Postgres connection string. When unset outside Vercel, a local PGlite database is used instead. */
   databaseUrl: process.env.DATABASE_URL,
-  pgliteDir: process.env.PGLITE_DIR ?? "./.data/pglite",
+  pgliteDir: process.env.PGLITE_DIR ?? (process.platform === "win32" ? "memory://" : "./.data/pglite"),
 
   firebaseProjectId:
     process.env.FIREBASE_PROJECT_ID ??

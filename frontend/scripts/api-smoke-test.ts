@@ -175,9 +175,9 @@ async function main() {
     form.append("is_anonymized", "true");
     return form;
   };
-  await check("supporters can't upload", async () => {
-    const res = await call(routes.images, "POST", "/api/images", { token: aliceNow, form: uploadForm() });
-    assert.equal(res.status, 403);
+  await check("unauthenticated upload -> 401", async () => {
+    const res = await call(routes.images, "POST", "/api/images", { form: uploadForm() });
+    assert.equal(res.status, 401);
   });
   await check("doctor upload reports ImgBB not configured", async () => {
     const res = await call(routes.images, "POST", "/api/images", { token: bob, form: uploadForm() });

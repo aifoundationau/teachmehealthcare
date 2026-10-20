@@ -13,7 +13,8 @@ import {
   Activity,
   Layers,
   Check,
-  X
+  X,
+  UploadCloud,
 } from "lucide-react";
 
 interface RelatedScansPanelProps {
@@ -22,6 +23,7 @@ interface RelatedScansPanelProps {
   onSelectScan: (scan: MedicalScanItem) => void;
   onSelectDocumentModality?: (item: { name: string; category: string; modality: string }) => void;
   onUploadScan?: (newScan: MedicalScanItem) => void;
+  onOpenUploadModal?: () => void;
 }
 
 export default function RelatedScansPanel({
@@ -30,6 +32,7 @@ export default function RelatedScansPanel({
   onSelectScan,
   onSelectDocumentModality,
   onUploadScan,
+  onOpenUploadModal,
 }: RelatedScansPanelProps) {
   // Category filter for the Index dialog only; the scan list below is filtered by its search box.
   const [selectedCategory, setSelectedCategory] = useState<string>("All Modalities");
@@ -57,15 +60,28 @@ export default function RelatedScansPanel({
             Diagnostic Multimodal Cohort
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsBrowseModalOpen(true)}
-          className="px-2.5 py-1 rounded bg-[#182332] hover:bg-cyan-600/30 text-cyan-400 hover:text-cyan-200 border border-cyan-800/50 text-[10px] sm:text-xs font-medium transition-colors flex items-center gap-1.5 shrink-0 shadow-sm"
-          title="Browse all 100+ diagnostic scans in medical syllabus"
-        >
-          <Layers className="w-3.5 h-3.5" />
-          <span>Index</span>
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onOpenUploadModal && (
+            <button
+              type="button"
+              onClick={onOpenUploadModal}
+              className="px-2 py-1 rounded bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-[10px] sm:text-xs font-semibold transition-all flex items-center gap-1 shadow-sm border border-cyan-400/30"
+              title="Upload new clinical scan & description"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>Upload</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsBrowseModalOpen(true)}
+            className="px-2.5 py-1 rounded bg-[#182332] hover:bg-cyan-600/30 text-cyan-400 hover:text-cyan-200 border border-cyan-800/50 text-[10px] sm:text-xs font-medium transition-colors flex items-center gap-1.5 shadow-sm"
+            title="Browse all 100+ diagnostic scans in medical syllabus"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Index</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter / Quick Search Bar */}

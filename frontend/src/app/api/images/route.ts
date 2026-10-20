@@ -1,7 +1,7 @@
 import { and, desc, eq, ilike, type SQL } from "drizzle-orm";
 import { z } from "zod";
 
-import { DOCTOR_ROLES, requireRole, requireUser } from "@/server/auth";
+import { DOCTOR_ROLES, optionalUser, requireRole, requireUser } from "@/server/auth";
 import { getDb } from "@/server/db";
 import { annotations, comments, medicalImages, users } from "@/server/db/schema";
 import { APP_TAG, env } from "@/server/env";
@@ -17,12 +17,12 @@ const listQuery = z.object({
   body_region: z.string().optional(),
   uploaded_by: z.coerce.number().int().positive().optional(),
   skip: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 /** Lists images, newest first, with optional filters. */
 export const GET = route(async (req) => {
-  await requireUser(req);
+  await optionalUser(req);
   const query = parseQuery(req, listQuery);
   const db = await getDb();
 
@@ -51,7 +51,9 @@ export const GET = route(async (req) => {
     rows.map(({ image, uploaderName, annotationCount, commentCount }) => ({
       id: image.id,
       title: image.title,
+      description: image.description,
       thumbnail_path: image.thumbnailPath,
+      file_path: image.filePath,
       modality: image.modality,
       body_region: image.bodyRegion,
       created_at: image.createdAt.toISOString(),
@@ -75,12 +77,11 @@ const uploadFields = z.object({
 
 /**
  * Uploads a scan (multipart form: file, title, modality, body_region, description,
- * is_anonymized). Doctors and admins only. Image metadata is removed before the
+ * is_anonymized). Available to authenticated users after login. Image metadata is removed before the
  * file is sent to ImgBB.
  */
 export const POST = route(async (req) => {
   const user = await requireUser(req);
-  requireRole(user, DOCTOR_ROLES);
 
   let form: FormData;
   try {

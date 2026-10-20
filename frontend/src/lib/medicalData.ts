@@ -52,7 +52,7 @@ export interface MedicalScanItem {
   id: string;
   category: string;
   title: string;
-  modality: "X-Ray" | "CT" | "MRI" | "Ultrasound" | "Nuclear Medicine" | "Fluoroscopy" | "Endoscopy" | "Electrophysiology" | "Pathology" | "Clinical Record";
+  modality: "X-Ray" | "CT" | "MRI" | "Ultrasound" | "Nuclear Medicine" | "Fluoroscopy" | "Endoscopy" | "Electrophysiology" | "Pathology" | "Clinical Record" | (string & {});
   patientCase: string;
   finding: string;
   badge: string;

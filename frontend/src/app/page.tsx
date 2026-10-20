@@ -16,7 +16,8 @@ import {
   MessageSquare,
   Newspaper,
   BookOpen,
-  Image as ImageIcon
+  Image as ImageIcon,
+  UploadCloud,
 } from "lucide-react";
 import AuthModal from "@/components/AuthModal";
 import SupporterProfileModal from "@/components/SupporterProfileModal";
@@ -26,6 +27,8 @@ import CollaborativeCaseroom from "@/components/CollaborativeCaseroom";
 import LocalizedRegionalNews from "@/components/LocalizedRegionalNews";
 import AcademicResearch from "@/components/AcademicResearch";
 import RelatedScansPanel from "@/components/RelatedScansPanel";
+import UploadScanModal from "@/components/UploadScanModal";
+import { apiFetch } from "@/lib/api";
 
 import {
   UserProfile,
@@ -87,6 +90,85 @@ export default function Home() {
     "viewer"
   );
   const [isScansDrawerOpen, setIsScansDrawerOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+
+  // Load community uploaded scans from server & local storage so they are always available
+  useEffect(() => {
+    async function loadCommunityScans() {
+      try {
+        const cached = readStorage("tmh_uploaded_scans");
+        let cachedScans: MedicalScanItem[] = [];
+        if (cached) {
+          try {
+            cachedScans = JSON.parse(cached);
+          } catch (e) {}
+        }
+
+        const res = await apiFetch("/images?limit=50");
+        if (res.ok) {
+          const dbImages = await res.json();
+          const fetchedScans: MedicalScanItem[] = dbImages.map((img: any) => {
+            const rawMod = (img.modality || "").toLowerCase();
+            const displayModality =
+              rawMod === "ct" ? "CT" : rawMod === "mri" ? "MRI" : rawMod === "ultrasound" ? "Ultrasound" : "X-Ray";
+            return {
+              id: `scan-db-${img.id}`,
+              category: `${displayModality} Imaging`,
+              title: img.title,
+              modality: displayModality as any,
+              patientCase: `${img.body_region || "Clinical"} Case #${img.id}`,
+              finding: img.description
+                ? img.description.slice(0, 110) + (img.description.length > 110 ? "..." : "")
+                : "Clinical imaging case",
+              badge: "Community Case",
+              image: img.file_path || img.thumbnail_path,
+              thumbnail: img.thumbnail_path || img.file_path,
+              bodyRegion: img.body_region || "Thorax & Lungs",
+              clinicalSummary: img.description || "Clinical presentation and imaging findings uploaded to ImgBB.",
+              patientAge: 48,
+              patientGender: "Male" as const,
+              history: img.description || "Patient clinical record and diagnostic imaging assessment.",
+              annotations: [],
+              caseroom: [
+                {
+                  id: `msg-db-${img.id}-1`,
+                  senderName: img.uploader_name || "Contributing Clinician",
+                  role: "Physician" as const,
+                  avatarColor: "from-cyan-600 to-blue-600",
+                  time: "Uploaded Case",
+                  message: img.description || "Clinical case uploaded and available for collaborative diagnostic review.",
+                },
+              ],
+              news: [],
+              academic: [],
+            };
+          });
+
+          setCohortScans((prev) => {
+            const existingIds = new Set(INITIAL_MEDICAL_SCANS.map((s) => s.id));
+            const allNew: MedicalScanItem[] = [];
+            for (const s of [...fetchedScans, ...cachedScans]) {
+              if (!existingIds.has(s.id)) {
+                existingIds.add(s.id);
+                allNew.push(s);
+              }
+            }
+            return [...allNew, ...INITIAL_MEDICAL_SCANS];
+          });
+        } else if (cachedScans.length > 0) {
+          setCohortScans((prev) => {
+            const existingIds = new Set(INITIAL_MEDICAL_SCANS.map((s) => s.id));
+            const allNew = cachedScans.filter((s) => !existingIds.has(s.id));
+            return [...allNew, ...INITIAL_MEDICAL_SCANS];
+          });
+        }
+      } catch (err) {
+        console.warn("[page] Community scans load note:", err);
+      }
+    }
+
+    loadCommunityScans();
+  }, []);
 
   // Initialize geo settings & clock timer
   useEffect(() => {
@@ -228,8 +310,25 @@ export default function Home() {
   };
 
   const handleUploadScan = (newScan: MedicalScanItem) => {
-    setCohortScans((prev) => [newScan, ...prev]);
+    setCohortScans((prev) => {
+      const exists = prev.some((s) => s.id === newScan.id);
+      const updated = exists ? prev.map((s) => (s.id === newScan.id ? newScan : s)) : [newScan, ...prev];
+      const customOnly = updated.filter((s) => s.id.startsWith("scan-"));
+      writeStorage("tmh_uploaded_scans", JSON.stringify(customOnly));
+      return updated;
+    });
     setActiveScan(newScan);
+    setMobileTab("viewer");
+  };
+
+  const handleOpenUploadModal = () => {
+    if (!currentUser) {
+      setIsSupportPrompt(false);
+      setAuthModalMode("login");
+      setIsAuthModalOpen(true);
+    } else {
+      setIsUploadModalOpen(true);
+    }
   };
 
   const handleSupportLmsClick = () => {
@@ -361,39 +460,61 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Right: Only Google Login / Register Button */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {/* Right: Upload Scan Button & Google Auth / Profile */}
+        <div className="flex items-center gap-2 shrink-0">
           {!currentUser ? (
-            <button
-              type="button"
-              id="google-auth-button"
-              onClick={handleDirectGoogleAuth}
-              disabled={isAuthLoading}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-900 text-xs font-bold shadow-md border border-gray-200 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 cursor-pointer"
-              title="Login or Register with Google"
-            >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span>{isAuthLoading ? "Connecting to Google..." : "Login / Register"}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={handleOpenUploadModal}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#131c2a] hover:bg-[#182436] text-cyan-400 hover:text-cyan-300 text-xs font-semibold border border-cyan-800/50 shadow-sm transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                title="Sign in to upload medical scans"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>Upload Scan</span>
+              </button>
+
+              <button
+                type="button"
+                id="google-auth-button"
+                onClick={handleDirectGoogleAuth}
+                disabled={isAuthLoading}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-gray-100 active:bg-gray-200 text-gray-900 text-xs font-bold shadow-md border border-gray-200 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+                title="Login or Register with Google"
+              >
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                  />
+                </svg>
+                <span>{isAuthLoading ? "Connecting to Google..." : "Login / Register"}</span>
+              </button>
+            </>
           ) : (
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsUploadModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md border border-cyan-400/40 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer shrink-0"
+                title="Upload Medical Scan & Clinical Description to ImgBB"
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Upload Scan</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => {
@@ -441,6 +562,14 @@ export default function Home() {
 
       {/* Mobile Universal Navigation Tabs (for viewports <768px) */}
       <div className="flex md:hidden bg-[#0d141f] border-b border-[#182332] px-2 py-1.5 text-xs gap-1 overflow-x-auto shrink-0 scrollbar-none">
+        <button
+          onClick={handleOpenUploadModal}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-md bg-[#131c2a] text-cyan-400 hover:text-cyan-300 transition-colors whitespace-nowrap font-medium"
+          title="Upload Medical Scan"
+        >
+          <UploadCloud className="w-3.5 h-3.5" />
+          <span>Upload</span>
+        </button>
         <button
           onClick={() => setMobileTab("viewer")}
           className={`flex items-center gap-1 px-3 py-1.5 rounded-md transition-colors whitespace-nowrap ${
@@ -514,6 +643,7 @@ export default function Home() {
               onSelectScan={(s) => setActiveScan(s)}
               onSelectDocumentModality={handleSelectDocumentModality}
               onUploadScan={handleUploadScan}
+              onOpenUploadModal={handleOpenUploadModal}
             />
           </aside>
 
@@ -527,14 +657,25 @@ export default function Home() {
                   {activeScan.title}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsScansDrawerOpen(true)}
-                className="px-2.5 py-1 rounded bg-[#182332] hover:bg-cyan-600/30 text-cyan-400 hover:text-cyan-200 border border-cyan-800/50 text-[11px] font-medium transition-colors flex items-center gap-1.5"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Related Scans ({cohortScans.length})</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenUploadModal}
+                  className="px-2.5 py-1 rounded bg-cyan-700/80 hover:bg-cyan-600 text-white text-[11px] font-medium transition-colors flex items-center gap-1 shadow-sm"
+                  title="Upload image & clinical description"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>Upload</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsScansDrawerOpen(true)}
+                  className="px-2.5 py-1 rounded bg-[#182332] hover:bg-cyan-600/30 text-cyan-400 hover:text-cyan-200 border border-cyan-800/50 text-[11px] font-medium transition-colors flex items-center gap-1.5"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>Related Scans ({cohortScans.length})</span>
+                </button>
+              </div>
             </div>
 
             <DiagnosticViewer scan={activeScan} />
@@ -751,11 +892,23 @@ export default function Home() {
                   handleUploadScan(s);
                   setIsScansDrawerOpen(false);
                 }}
+                onOpenUploadModal={() => {
+                  setIsScansDrawerOpen(false);
+                  handleOpenUploadModal();
+                }}
               />
             </div>
           </div>
         </div>
       )}
+
+      {/* Upload Scan & Clinical Description Modal */}
+      <UploadScanModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        onScanUploaded={handleUploadScan}
+        currentUser={currentUser}
+      />
     </div>
   );
 }
