@@ -37,6 +37,14 @@ Guidelines:
 - Never give a definitive diagnosis
 - If the context doesn't contain enough information, say so honestly`;
 
+/**
+ * Time limits per Gemini call, so a stalled request fails with a clear error instead of
+ * hanging the API route until the platform kills it (AI routes allow 60s on Vercel).
+ */
+const ANALYSIS_TIMEOUT_MS = 45_000;
+const ANSWER_TIMEOUT_MS = 40_000;
+const EMBEDDING_TIMEOUT_MS = 15_000;
+
 let client: GoogleGenAI | undefined;
 
 function gemini(): GoogleGenAI {
@@ -74,7 +82,7 @@ export async function analyzeImage(image: Buffer, mimeType: string): Promise<str
           ],
         },
       ],
-      config: { temperature: 0.3, maxOutputTokens: 4096 },
+      config: { temperature: 0.3, maxOutputTokens: 4096, httpOptions: { timeout: ANALYSIS_TIMEOUT_MS } },
     }),
   );
   if (!response.text) throw new ApiError(502, "AI analysis returned no text.");
@@ -92,7 +100,7 @@ export async function embed(text: string, kind: "document" | "query"): Promise<n
     ai.models.embedContent({
       model: env.geminiEmbeddingModel,
       contents,
-      config: { outputDimensionality: EMBEDDING_DIMENSIONS },
+      config: { outputDimensionality: EMBEDDING_DIMENSIONS, httpOptions: { timeout: EMBEDDING_TIMEOUT_MS } },
     }),
   );
   const values = response.embeddings?.[0]?.values;
@@ -124,7 +132,12 @@ export async function answerQuestion(question: string, sources: RagSource[]): Pr
     ai.models.generateContent({
       model: env.geminiModel,
       contents: `Context from the knowledge base:\n${context}\n\nAnswer the following question using the context above. Cite specific cases where relevant.\n\nQuestion: ${question}`,
-      config: { systemInstruction: RAG_SYSTEM_PROMPT, temperature: 0.4, maxOutputTokens: 4096 },
+      config: {
+        systemInstruction: RAG_SYSTEM_PROMPT,
+        temperature: 0.4,
+        maxOutputTokens: 4096,
+        httpOptions: { timeout: ANSWER_TIMEOUT_MS },
+      },
     }),
   );
   if (!response.text) throw new ApiError(502, "AI answer returned no text.");

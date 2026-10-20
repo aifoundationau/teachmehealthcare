@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 
 import { apiFetch } from "@/lib/api";
+import { removeStorage, writeStorage } from "@/lib/storage";
 
 export const APP_TAG = process.env.NEXT_PUBLIC_APP_TAG || "healthlms";
 
@@ -135,9 +136,9 @@ export function notifyAuthState(user: UserProfile | null) {
   currentCachedUser = user;
   if (typeof window !== "undefined") {
     if (user) {
-      localStorage.setItem("tmh_user", JSON.stringify(user));
+      writeStorage("tmh_user", JSON.stringify(user));
     } else {
-      localStorage.removeItem("tmh_user");
+      removeStorage("tmh_user");
     }
   }
   authListeners.forEach((cb) => {
@@ -297,8 +298,8 @@ export async function logOutUser(): Promise<void> {
     } catch (e) {
       console.warn("Firebase sign out note:", e);
     }
-    localStorage.removeItem("tmh_user");
-    localStorage.removeItem("tmh_token");
+    removeStorage("tmh_user");
+    removeStorage("tmh_token");
   }
   notifyAuthState(null);
 }

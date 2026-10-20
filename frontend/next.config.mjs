@@ -10,14 +10,9 @@ const nextConfig = {
   webpack: (config, { dev }) => {
     config.resolve.symlinks = false;
     if (dev) {
+      // Webpack accepts one RegExp or an array of glob strings here; an array of RegExps fails validation.
       config.watchOptions = {
-        ignored: [
-          '**/node_modules/**',
-          '**/.next/**',
-          '**/.git/**',
-          '**/.venv/**',
-          '**/backend/**',
-        ],
+        ignored: /[\\/](node_modules|\.next|\.git|\.venv|backend)([\\/]|$)/,
       };
     }
     return config;

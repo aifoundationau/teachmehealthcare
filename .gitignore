@@ -46,3 +46,8 @@ yarn-error.log*
 *.pem
 .vercel
 skill-creator/
+
+# Service Accounts & Credentials
+*service-account*.json
+*credentials*.json
+firebase-service-account.json

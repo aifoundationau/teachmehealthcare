@@ -44,6 +44,7 @@ import {
   hasStoredGeoSettings,
   formatDateTime,
 } from "@/lib/geoSettings";
+import { readStorage, writeStorage } from "@/lib/storage";
 import {
   MedicalScanItem,
   INITIAL_MEDICAL_SCANS,
@@ -109,7 +110,7 @@ export default function Home() {
 
   // Restore authenticated supporter state on load
   useEffect(() => {
-    const storedUser = localStorage.getItem("tmh_user");
+    const storedUser = readStorage("tmh_user");
     if (storedUser) {
       try {
         const parsed = JSON.parse(storedUser);
@@ -702,7 +703,7 @@ export default function Home() {
           focusPayment={profileFocusPayment}
           onUserUpdate={(updated) => {
             setCurrentUser(updated);
-            localStorage.setItem("tmh_user", JSON.stringify(updated));
+            writeStorage("tmh_user", JSON.stringify(updated));
           }}
           onLogOut={() => {
             setCurrentUser(null);

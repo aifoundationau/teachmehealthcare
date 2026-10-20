@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { UserProfile, logOutUser, saveSupporterToFirestore, APP_TAG } from "@/lib/firebase";
 import { apiFetch } from "@/lib/api";
+import { writeStorage } from "@/lib/storage";
 
 interface SupporterProfileModalProps {
   isOpen: boolean;
@@ -88,13 +89,17 @@ export default function SupporterProfileModal({
       if (!res.ok) {
         const error = await res.json().catch(() => null);
         console.warn("Profile save rejected:", res.status, error?.detail);
-        // Invalid details (e.g. a malformed phone number): keep the form open so they can be fixed.
-        if (res.status === 422) {
+        // Nothing was saved: keep the form open so the details can be fixed or the save retried.
+        if (res.status === 401) {
+          setSaveError("Your sign-in has expired. Please log out and sign in again, then save your details.");
+        } else if (res.status < 500) {
           setSaveError(
             typeof error?.detail === "string" ? error.detail : "Some details are invalid. Please check and try again."
           );
-          return;
+        } else {
+          setSaveError("Your details couldn't be saved right now. Please try again in a moment.");
         }
+        return;
       }
 
       if (user.firebaseUid) {
@@ -116,11 +121,12 @@ export default function SupporterProfileModal({
         address,
         comments,
       };
-      localStorage.setItem("tmh_user", JSON.stringify(updated));
+      writeStorage("tmh_user", JSON.stringify(updated));
       onUserUpdate(updated);
       setIsEditing(false);
     } catch (err) {
       console.error("Failed to update profile:", err);
+      setSaveError("Couldn't reach the server. Please check your connection and try again.");
     } finally {
       setIsSaving(false);
     }

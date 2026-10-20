@@ -345,7 +345,7 @@ export default function DiagnosticViewer({ scan }: DiagnosticViewerProps) {
           )}
 
           {/* Active Measurement Tooltip */}
-          {isRulerActive && customRuler.distanceMm && customRuler.current && (
+          {isRulerActive && !!customRuler.distanceMm && customRuler.current && (
             <div
               className="absolute z-30 px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-600 text-emerald-300 text-[11px] font-mono pointer-events-none shadow-lg -translate-x-1/2 -translate-y-8"
               style={{

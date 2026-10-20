@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AcademicArticle } from "@/lib/medicalData";
 import { apiFetch } from "@/lib/api";
+import { readStorage, writeStorage } from "@/lib/storage";
 
 export interface ScholarArticleResult {
   id: string;
@@ -73,7 +74,7 @@ export default function AcademicResearch({
 
   // Restore & manage local 60-second cooldown timer
   useEffect(() => {
-    const lastSearch = localStorage.getItem("tmh_last_scholar_search");
+    const lastSearch = readStorage("tmh_last_scholar_search");
     if (lastSearch) {
       const elapsed = Math.floor((Date.now() - parseInt(lastSearch, 10)) / 1000);
       if (elapsed < 60) {
@@ -119,7 +120,7 @@ export default function AcademicResearch({
 
     // Save cooldown timestamp in local storage
     const now = Date.now();
-    localStorage.setItem("tmh_last_scholar_search", now.toString());
+    writeStorage("tmh_last_scholar_search", now.toString());
     setCooldownRemaining(60);
 
     try {
